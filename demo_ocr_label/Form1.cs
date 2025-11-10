@@ -1,6 +1,7 @@
 ﻿using ClosedXML.Excel;
 using demo_ocr_label;
 using DirectShowLib;
+using DocumentFormat.OpenXml.Drawing.Charts;
 using OpenCvSharp;
 using PaddleOCRSharp;
 using System;
@@ -38,6 +39,8 @@ namespace demo_ocr_label
 
 
         private PaddleOCREngine? ocr;
+        public PaddleOCREngine? directClassOCR;
+        private LabelDetector labelDetector;
         //OCRModelConfig config = new OCRModelConfig();
         //config.det_infer = @"models\ch_PP-OCRv3_det_infer";
         //config.rec_infer = @"models\ch_PP-OCRv3_rec_infer";
@@ -48,11 +51,13 @@ namespace demo_ocr_label
         private List<string> sizes = new List<string>();
         private List<string> colors = new List<string>();
 
-        private int pauseTime = 2; // seconds
+        private int pauseTime = 0; // seconds
         public Form1()
         {
             InitializeComponent();
+            
         }
+
 
 
         // handle button click to open/close camera
@@ -125,6 +130,9 @@ namespace demo_ocr_label
             LoadExcelData("data.xlsx");
             LoadCameraList();
             InitOCR();
+
+            InitDirectClassOCR();
+            labelDetector = new LabelDetector(directClassOCR);
 
             pauseTime = (int)numericUpDown1.Value;
 
@@ -330,7 +338,9 @@ namespace demo_ocr_label
                 var bmpFull = MatToBitmap(frame);
 
                 // Lấy ROI (guide box) từ frame gốc
-                var roi = GetGuideBoxRoi(bmpFull, cameraBox.GuideBox, cameraBox.Size);
+                var roiResult = GetGuideBoxRoi(bmpFull, cameraBox.GuideBox, cameraBox);
+                var roi = roiResult.Image;
+                var mapped = roiResult.Mapped;
                 if (roi == null)
                 {
                     // Không có ROI hợp lệ → hiển thị ảnh gốc
@@ -343,13 +353,13 @@ namespace demo_ocr_label
                     continue;
                 }
 
-                // Tính offset (tọa độ ROI trên full frame)
-                float scaleX = (float)bmpFull.Width / cameraBox.Width;
-                float scaleY = (float)bmpFull.Height / cameraBox.Height;
+                //// Tính offset (tọa độ ROI trên full frame)
+                //float scaleX = (float)bmpFull.Width / cameraBox.Width;
+                //float scaleY = (float)bmpFull.Height / cameraBox.Height;
 
-                var guideRect = cameraBox.GuideBox;
-                int offsetX = (int)(guideRect.X * scaleX);
-                int offsetY = (int)(guideRect.Y * scaleY);
+                //var guideRect = cameraBox.GuideBox;
+                //int offsetX = (int)(guideRect.X * scaleX);
+                //int offsetY = (int)(guideRect.Y * scaleY);
 
                 try
                 {
@@ -364,36 +374,28 @@ namespace demo_ocr_label
                     // tìm thấy label
                     if (rect != null && box != null && qrText != null)
                     {
-                        //Debug.WriteLine("vô đây111");
-                        //cameraBox.BeginInvoke(new Action(() =>
-                        //{
-                        //    cameraBox.IsObjectDetected = true;   // ✅ đổi sang khung xanh
-                        //    cameraBox.Invalidate();
-                        //}));
-
-
                         // 2️⃣ Chuyển tọa độ box trong ROI -> tọa độ full ảnh
                         var fullBox = box.Select(p =>
-                            new OpenCvSharp.Point(p.X + offsetX, p.Y + offsetY)
+                            new OpenCvSharp.Point(p.X + mapped.X, p.Y + mapped.Y)
                         ).ToArray();
 
                         // 3️⃣ Vẽ khung label và tâm trên frame full
                         Cv2.Polylines(mat, new[] { fullBox }, true, Scalar.Lime, 2);
                         //Cv2.Circle(mat,
                         //    new OpenCvSharp.Point(
-                        //        (int)(rect.Value.Center.X + offsetX),
-                        //        (int)(rect.Value.Center.Y + offsetY)),
+                        //        (int)(rect.Value.Center.X + mapped.X),
+                        //        (int)(rect.Value.Center.Y + mapped.Y)),
                         //    4, Scalar.Red, -1);
 
                         Cv2.PutText(mat, $"Angle={rect.Value.Angle:F1}",
-                            new OpenCvSharp.Point(offsetX, Math.Max(0, offsetY - 10)),
+                            new OpenCvSharp.Point(mapped.X, Math.Max(0, mapped.Y - 10)),
                             HersheyFonts.HersheySimplex, 0.7, Scalar.Yellow, 2);
 
-                        //// 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
-                        //Cv2.Rectangle(mat,
-                        //    new OpenCvSharp.Point(offsetX, offsetY),
-                        //    new OpenCvSharp.Point(offsetX + roi.Width, offsetY + roi.Height),
-                        //    Scalar.Blue, 2);
+                        // 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
+                        Cv2.Rectangle(mat,
+                            new OpenCvSharp.Point(mapped.X, mapped.Y),
+                            new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
+                            Scalar.Blue, 2);
 
                         // 2 Hiển thị frame kết quả
                         var debugBmp = MatToBitmap(mat);
@@ -411,8 +413,15 @@ namespace demo_ocr_label
 
                         }));
 
-                        var aligned = LabelDetector.CropAndAlignLabel(roi, rect.Value, box);
+                        var aligned = labelDetector.CropAndAlignLabel(roi, rect.Value, box);
+
+
+                        ////3 DEBUG: luôn hiển thị ảnh cắt label
+                        //pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
+                        //pictureBox1.Image = aligned;
+
                         if (aligned != null)
+                        //if (false)
                         {
                             // 1️⃣ Gọi OCR trên vùng dưới bên trái
                             var (croppedImg, ocrTexts, minScore) = RunOcrOnBottomLeftQuarter(ocr, aligned);
@@ -429,8 +438,8 @@ namespace demo_ocr_label
 
                                 //// 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
                                 //Cv2.Rectangle(mat,
-                                //    new OpenCvSharp.Point(offsetX, offsetY),
-                                //    new OpenCvSharp.Point(offsetX + roi.Width, offsetY + roi.Height),
+                                //    new OpenCvSharp.Point(mapped.X, mapped.Y),
+                                //    new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
                                 //    Scalar.Blue, 2);
 
                                 //// 2 Hiển thị frame kết quả
@@ -452,6 +461,7 @@ namespace demo_ocr_label
                                 // 3 hiển thị ảnh debug label đã xoay và cắt
                                 pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
                                 pictureBox1.Image = aligned;
+
                                 cameraBox.BeginInvoke(new Action(() =>
                                 {
                                     cameraBox.IsObjectDetected = true;   // ✅ đổi sang khung xanh
@@ -493,7 +503,7 @@ namespace demo_ocr_label
                                         $"Size áo: \"{size}\"\r\n" +
                                         $"Màu áo: \"{color}\"";
                                 }));
-                                await Task.Delay(pauseTime * 1000); // dừng vài giây trước khi detect tiếp
+                                await Task.Delay(pauseTime * 1000); // dừng pauseTime giây trước khi detect tiếp
                                 //MessageBox.Show("⏸️ Đang tạm dừng...\nNhấn OK để tiếp tục", "Tạm dừng test");
 
                             }
@@ -518,8 +528,8 @@ namespace demo_ocr_label
 
                         //// 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
                         //Cv2.Rectangle(mat,
-                        //    new OpenCvSharp.Point(offsetX, offsetY),
-                        //    new OpenCvSharp.Point(offsetX + roi.Width, offsetY + roi.Height),
+                        //    new OpenCvSharp.Point(mapped.X, mapped.Y),
+                        //    new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
                         //    Scalar.Blue, 2);
 
                         // 2 Hiển thị frame kết quả
@@ -536,6 +546,30 @@ namespace demo_ocr_label
                             //Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
                             label6.Text = $"FPS: {fps:F1}";
 
+                        }));
+
+
+                        // 3 hiển thị ảnh debug label đã xoay và cắt
+                        pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
+                        pictureBox1.Image = null;
+
+
+                        // 4 hiển thị ảnh cắt 1/4
+                        pictureBox2.BeginInvoke(new Action(() =>
+                        {
+                            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
+                            pictureBox2.Image?.Dispose();
+                            pictureBox2.Image = null; // không cần clone nữa
+                        }));
+
+                        // 5 Hiển thị text lên textbox
+                        textBox1.BeginInvoke(new Action(() =>
+                        {
+                            textBox1.Multiline = true;
+                            textBox1.AutoSize = false;
+                            textBox1.ScrollBars = ScrollBars.Vertical;
+
+                            textBox1.Text = "";
                         }));
                     }
                 }
@@ -710,7 +744,6 @@ namespace demo_ocr_label
         }
 
 
-
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _cts?.Cancel();
@@ -771,7 +804,7 @@ namespace demo_ocr_label
 
                 cpu_math_library_num_threads = 6,
                 enable_mkldnn = true,
-                cls = true,
+                cls = false,
                 det = true,
                 det_db_score_mode = true
 
@@ -780,49 +813,74 @@ namespace demo_ocr_label
             ocr = new PaddleOCREngine(config, param);
         }
 
-        // lấy vị trí guild box
-        private Bitmap? GetGuideBoxRoi(Bitmap frame, Rectangle guideBox, System.Drawing.Size cameraBoxSize)
+        private void InitDirectClassOCR()
         {
+            // Khởi tạo OCR cho DirectClass
+            OCRModelConfig config = null;   // model tích hợp
+            //OCRModelConfig config = new OCRModelConfig();
+            //config.det_infer = @"models\ch_PP-OCRv3_det_infer";
+            //config.rec_infer = @"models\ch_PP-OCRv3_rec_infer";
+            //config.cls_infer = @"models\ch_ppocr_mobile_v2.0_cls_infer";
+            //config.keys = @"models\ppocr_keys.txt";
+            OCRParameter param = new OCRParameter
+            {
+                cpu_math_library_num_threads = 6,
+                enable_mkldnn = true,
+                det = true,
+                cls = true,
+                rec = false,
+                det_db_score_mode = false
+            };
+            //param.ort = false;
+            directClassOCR = new PaddleOCREngine(config, param);
+        }
+
+
+
+
+        // lấy vị trí guild box
+        private RoiResult GetGuideBoxRoi(Bitmap frame, Rectangle guideBox, OverlayPictureBox cameraBox)
+        {
+            RoiResult result = new RoiResult();
+
             if (frame == null || frame.Width == 0 || frame.Height == 0)
-                return null;
-            if (cameraBoxSize.Width <= 0 || cameraBoxSize.Height <= 0)
-                return null;
+                return result;
+            if (cameraBox == null || cameraBox.ClientSize.Width == 0 || cameraBox.ClientSize.Height == 0)
+                return result;
 
             float imgW = frame.Width;
             float imgH = frame.Height;
-            float boxW = cameraBoxSize.Width;
-            float boxH = cameraBoxSize.Height;
+            float boxW = cameraBox.ClientSize.Width;
+            float boxH = cameraBox.ClientSize.Height;
 
-            // 🧮 Scale theo chiều nhỏ hơn để không bị crop
             float scale = Math.Min(boxW / imgW, boxH / imgH);
-
-            // 📏 Kích thước ảnh thật sau khi co giãn để hiển thị
             float drawW = imgW * scale;
             float drawH = imgH * scale;
-
-            // ⚙️ Offset viền đen (căn giữa)
             float offsetX = (boxW - drawW) / 2f;
             float offsetY = (boxH - drawH) / 2f;
 
-            // 🔁 Chuyển tọa độ UI → ảnh gốc
             float x = (guideBox.X - offsetX) / scale;
             float y = (guideBox.Y - offsetY) / scale;
             float w = guideBox.Width / scale;
             float h = guideBox.Height / scale;
 
-            // 🧱 Giới hạn trong ảnh thật
             x = Math.Max(0, x);
             y = Math.Max(0, y);
             w = Math.Min(imgW - x, w);
             h = Math.Min(imgH - y, h);
 
             var mapped = new Rectangle((int)x, (int)y, (int)w, (int)h);
+            mapped.Intersect(new Rectangle(0, 0, (int)imgW, (int)imgH));
 
-            // ✂️ Cắt ROI
             if (mapped.Width > 0 && mapped.Height > 0)
-                return frame.Clone(mapped, frame.PixelFormat);
+                result.Image = frame.Clone(mapped, frame.PixelFormat);
 
-            return null;
+            result.Mapped = mapped;
+            result.Scale = scale;
+            result.OffsetX = offsetX;
+            result.OffsetY = offsetY;
+
+            return result;
         }
 
         //private void DetectInsideGuideBox()
