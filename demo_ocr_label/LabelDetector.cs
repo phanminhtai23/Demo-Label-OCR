@@ -11,21 +11,20 @@ namespace demo_ocr_label
 {
     public class LabelDetector
     {
-        private PaddleOCREngine directClassOCR;
-        public LabelDetector(PaddleOCREngine ocrEngine)
+        public LabelDetector()
         {
-            directClassOCR = ocrEngine ?? throw new ArgumentNullException(nameof(ocrEngine));
+            // Không cần tham số nữa
         }
         /// <summary>
         /// Detect label similar to the provided Python implementation.
         /// Input: Bitmap (BGR)
-        /// Output: (rotatedRect, boxPoints) or (null, null) if not found
+        /// Output: (rotatedRect, boxPoints, qrText, qrPoints) or (null, null, null, null) if not found
         /// </summary>
-        public static (RotatedRect? rect, OpenCvSharp.Point[]? box, string? qrText)
+        public static (RotatedRect? rect, OpenCvSharp.Point[]? box, string? qrText, Point2f[]? qrPoints)
             DetectLabelRegion(Bitmap inputBmp, int thresholdValue = 150)
         {
             if (inputBmp == null)
-                return (null, null, null);
+                return (null, null, null, null);
 
             // Convert Bitmap -> Mat (BGR)
             Mat src;
@@ -67,7 +66,7 @@ namespace demo_ocr_label
                 // 3️⃣ Find contours (external)
                 Cv2.FindContours(binary, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
                 if (contours == null || contours.Length == 0)
-                    return (null, null, null);
+                    return (null, null, null, null);
 
                 // 4️⃣ Chọn contour lớn nhất
                 OpenCvSharp.Point[] biggest = null!;
@@ -84,7 +83,7 @@ namespace demo_ocr_label
 
                 //if (biggest == null || maxArea < 1000)
                  if (biggest == null)
-                     return (null, null, null);
+                     return (null, null, null, null);
 
                 // 5️⃣ Lấy MinAreaRect và box
                 var rect = Cv2.MinAreaRect(biggest);
@@ -102,13 +101,13 @@ namespace demo_ocr_label
 
                 // 7️⃣ Dò QR code trong vùng label
                 string qrText = "";
+                Point2f[] qrPoints = null!; // Đổi tên để rõ nghĩa
                 try
                 {
                     using var qr = new QRCodeDetector();
-                    Point2f[] points;
                     using var straight = new Mat();
 
-                    qrText = qr.DetectAndDecode(labelRoi, out points, straight);
+                    qrText = qr.DetectAndDecode(labelRoi, out qrPoints, straight);
                 }
                 catch (Exception ex)
                 {
@@ -117,9 +116,9 @@ namespace demo_ocr_label
 
                 // 8️⃣ Chỉ trả về nếu có QR thật
                 if (!string.IsNullOrEmpty(qrText))
-                    return (rect, box, qrText);
+                    return (rect, box, qrText, qrPoints);
 
-                return (null, null, null);
+                return (null, null, null, null);
             }
             finally
             {
@@ -130,9 +129,9 @@ namespace demo_ocr_label
 
         /// <summary>
         /// Xoay và cắt label theo tọa độ rect trong ROI.
-        /// Nhận vào: ROI bitmap, rect, box → trả về ảnh label đã xoay thẳng.
+        /// Nhận vào: ROI bitmap, rect, box, qrPoints → trả về ảnh label đã xoay thẳng.
         /// </summary>
-        public Bitmap CropAndAlignLabel(Bitmap roi, RotatedRect rect, OpenCvSharp.Point[] box)
+        public Bitmap CropAndAlignLabel(Bitmap roi, RotatedRect rect, OpenCvSharp.Point[] box, Point2f[] qrPoints)
         {
             try
             {
@@ -171,9 +170,31 @@ namespace demo_ocr_label
                 }
 
                 //Debug.WriteLine($"angel sau xy ly: {angle}");
+                float labelAngle = angle; // Đổi tên để phân biệt với qrAngle
+
+                // ========== CODE MỚI: Tính góc QR Code ==========
+                // Vector cạnh trên của QR (từ Top-Left → Top-Right)
+                Point2f vec_QR_Top = qrPoints[1] - qrPoints[0];
+
+                // Tính góc "sự thật" từ vector này
+                float qrAngle = (float)(Math.Atan2(vec_QR_Top.Y, vec_QR_Top.X) * (180.0 / Math.PI));
+                // =================================================
+
+                // ========== CODE MỚI: So sánh góc ==========
+                float deltaAngle = labelAngle - qrAngle;
+
+                // Chuẩn hóa delta về [-180, 180]
+                while (deltaAngle <= -180) deltaAngle += 360;
+                while (deltaAngle > 180) deltaAngle -= 360;
+
+                // Quyết định: Nếu chênh lệch > 90 độ → ngược nhau 180°
+                bool needs180Flip = Math.Abs(deltaAngle) > 90;
+
+                Debug.WriteLine($"🧭 Label={labelAngle:F1}°, QR={qrAngle:F1}°, Δ={deltaAngle:F1}° → Flip180={needs180Flip}");
+                // ============================================
 
                 // 🔹 3) Ma trận xoay quanh tâm label trong ROI
-                Mat rotationMatrix = Cv2.GetRotationMatrix2D(rect.Center, angle, 1.0);
+                Mat rotationMatrix = Cv2.GetRotationMatrix2D(rect.Center, labelAngle, 1.0);
 
                 // 🔹 4) Tạo ảnh xoay có cùng kích thước như ROI
                 Mat rotated = new Mat();
@@ -195,92 +216,20 @@ namespace demo_ocr_label
                 OpenCvSharp.Rect cropRect = new(x, y, labelWidth, labelHeight);
                 Mat cropped = new Mat(rotated, cropRect);
 
-
-                var PaddleCheck180 = Stopwatch.StartNew();
-                if (IsImageUpsideDown(cropped))
+                // 🔹 6) Kiểm tra và xoay 180° nếu cần (dựa trên QR geometry)
+                if (needs180Flip)
                 {
-                    // 🔄 Xoay lại 180 độ
                     Cv2.Rotate(cropped, cropped, RotateFlags.Rotate180);
-                    //Debug.WriteLine("🔄 Đã xoay lại 180° để chỉnh hướng chữ.");
-
-
+                    Debug.WriteLine("🔄 Đã xoay lại 180° (dựa trên QR geometry).");
                 }
-                PaddleCheck180.Stop();                       // dừng đếm
-                double ms3 = PaddleCheck180.ElapsedMilliseconds;
-                Debug.WriteLine($"Paddle check 180 and rotate time: {ms3:F2} ms");
 
-                // 🔹 6) Trả kết quả Bitmap
+                // 🔹 7) Trả kết quả Bitmap
                 return MatToBitmap(cropped);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[CropAndAlignLabel ERROR] {ex.Message}");
                 return null;
-            }
-        }
-
-        // <summary>
-        /// Kiểm tra ảnh có bị xoay ngược (180°) hay không.
-        /// </summary>
-        /// <param name="mat">Ảnh đầu vào (Mat từ OpenCvSharp)</param>
-        /// <returns>true nếu ảnh bị ngược chữ, false nếu đúng chiều.</returns>
-        public bool IsImageUpsideDown(Mat mat)
-        {
-            if (mat == null || mat.Empty())
-            {
-                Debug.WriteLine("[IsImageUpsideDown] ❌ Ảnh rỗng hoặc null");
-                return false;
-            }
-
-            try
-            {
-                // PaddleOCRSharp hỗ trợ đọc từ Mat thông qua chuyển sang Bitmap
-                using (var bmp = MatToBitmap(mat))
-                {
-                    var result = directClassOCR.DetectText(bmp);
-
-                    if (result == null || result.TextBlocks == null || result.TextBlocks.Count == 0)
-                    {
-                        Debug.WriteLine("[IsImageUpsideDown] ⚠️ Không phát hiện vùng chữ nào.");
-                        return false;
-                    }
-
-                    // 🔍 Lấy box có độ tin cậy (Score) cao nhất
-                    var bestBlock = result.TextBlocks
-                        .OrderByDescending(tb => tb.cls_score)
-                        .First();
-
-                    //Debug.WriteLine("[IsImageUpsideDown] Phát hiện chữ: " + bestBlock);
-
-                    //// Một số bản trả về Angle, bản khác trả về Direction
-                    //float angle = bestBlock.Angle;
-                    //string direction = bestBlock.Direction;
-
-                    //Debug.WriteLine($"[OCR] Text: '{bestBlock.Text}' | Score: {bestBlock.Score:F2} | Angle: {angle} | Direction: {direction}");
-
-                    //// ✅ Cách 1: nếu có Direction
-                    //if (!string.IsNullOrEmpty(direction))
-                    //{
-                    //    // "1" = chữ bị xoay ngược 180°, "0" = đúng hướng
-                    //    return direction == "1";
-                    //}
-
-                    //// ✅ Cách 2: nếu chỉ có Angle
-                    //if (angle >= 150 && angle <= 210)
-                    //    return true;  // ảnh bị xoay ngược
-
-                    // ✅ Nếu góc nhỏ hơn 30° hoặc lớn hơn 330° → bình thường
-
-                    if (bestBlock.cls_label == 0)
-                        return false;
-
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[IsImageUpsideDown] ❌ Lỗi OCR: " + ex.Message);
-                return false;
             }
         }
 

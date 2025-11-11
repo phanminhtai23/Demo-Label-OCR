@@ -39,7 +39,6 @@ namespace demo_ocr_label
 
 
         private PaddleOCREngine? ocr;
-        public PaddleOCREngine? directClassOCR;
         private LabelDetector labelDetector;
         //OCRModelConfig config = new OCRModelConfig();
         //config.det_infer = @"models\ch_PP-OCRv3_det_infer";
@@ -131,8 +130,7 @@ namespace demo_ocr_label
             LoadCameraList();
             InitOCR();
 
-            InitDirectClassOCR();
-            labelDetector = new LabelDetector(directClassOCR);
+            labelDetector = new LabelDetector();
 
             pauseTime = (int)numericUpDown1.Value;
 
@@ -373,7 +371,7 @@ namespace demo_ocr_label
                     
                     currentThreshold = (int)numericThreshold.Value;
                     // 1️⃣ Detect label trong vùng ROI
-                    var (rect, box, qrText) = LabelDetector.DetectLabelRegion(roi, currentThreshold);
+                    var (rect, box, qrText, qrPoints) = LabelDetector.DetectLabelRegion(roi, currentThreshold);
 
                     using var mat = frame.Clone(); // frame gốc để vẽ overlay
 
@@ -383,7 +381,7 @@ namespace demo_ocr_label
                     Debug.WriteLine($"Detect Label + QR time: {ms1:F2} ms");
 
                     // tìm thấy label
-                    if (rect != null && box != null && qrText != null)
+                    if (rect != null && box != null && qrText != null && qrPoints != null)
                     {
                         var CatXoayLabelTime = Stopwatch.StartNew();
 
@@ -427,7 +425,7 @@ namespace demo_ocr_label
 
                         }));
 
-                        var aligned = labelDetector.CropAndAlignLabel(roi, rect.Value, box);
+                        var aligned = labelDetector.CropAndAlignLabel(roi, rect.Value, box, qrPoints);
 
                         CatXoayLabelTime.Stop();                       // dừng đếm
                         double ms2 = CatXoayLabelTime.ElapsedMilliseconds;
@@ -862,31 +860,6 @@ namespace demo_ocr_label
             //param.ort = false;
             ocr = new PaddleOCREngine(config, param);
         }
-
-        private void InitDirectClassOCR()
-        {
-            // Khởi tạo OCR cho DirectClass
-            OCRModelConfig config = null;   // model tích hợp
-            //OCRModelConfig config = new OCRModelConfig();
-            //config.det_infer = @"models\ch_PP-OCRv3_det_infer";
-            //config.rec_infer = @"models\ch_PP-OCRv3_rec_infer";
-            //config.cls_infer = @"models\ch_ppocr_mobile_v2.0_cls_infer";
-            //config.keys = @"models\ppocr_keys.txt";
-            OCRParameter param = new OCRParameter
-            {
-                cpu_math_library_num_threads = 6,
-                enable_mkldnn = true,
-                det = true,
-                cls = true,
-                rec = false,
-                det_db_score_mode = false
-            };
-            //param.ort = false;
-            directClassOCR = new PaddleOCREngine(config, param);
-        }
-
-
-
 
         // lấy vị trí guild box
         private RoiResult GetGuideBoxRoi(Bitmap frame, Rectangle guideBox, OverlayPictureBox cameraBox)
