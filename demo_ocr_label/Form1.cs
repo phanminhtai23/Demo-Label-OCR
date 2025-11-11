@@ -366,7 +366,8 @@ namespace demo_ocr_label
                     var ocrTime = Stopwatch.StartNew();
                     currentThreshold = (int)numericThreshold.Value;
                     // 1️⃣ Detect label trong vùng ROI
-                    var (rect, box, qrText) = LabelDetector.DetectLabelRegion(roi, currentThreshold);
+                    // ⚙️ Đặt saveDebugImages = true để lưu ảnh debug tại mỗi bước
+                    var (rect, box, qrText) = LabelDetector.DetectLabelRegion(roi, currentThreshold, saveDebugImages: true);
 
                     using var mat = frame.Clone(); // frame gốc để vẽ overlay
 

@@ -22,10 +22,23 @@ namespace demo_ocr_label
         /// Output: (rotatedRect, boxPoints) or (null, null) if not found
         /// </summary>
         public static (RotatedRect? rect, OpenCvSharp.Point[]? box, string? qrText)
-            DetectLabelRegion(Bitmap inputBmp, int thresholdValue = 150)
+            DetectLabelRegion(Bitmap inputBmp, int thresholdValue = 150, bool saveDebugImages = true)
         {
             if (inputBmp == null)
                 return (null, null, null);
+
+            // Tạo timestamp để tránh ghi đè file
+            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+            
+            // 🎯 Lưu vào thư mục source code (resources/images), không phải thư mục bin
+            string projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)!.Parent!.Parent!.Parent!.FullName;
+            string debugPath = Path.Combine(projectRoot, "resources", "images");
+            
+            // Tạo thư mục nếu chưa có
+            if (saveDebugImages && !Directory.Exists(debugPath))
+            {
+                Directory.CreateDirectory(debugPath);
+            }
 
             // Convert Bitmap -> Mat (BGR)
             Mat src;
@@ -37,13 +50,35 @@ namespace demo_ocr_label
 
             try
             {
+                // 🖼️ Bước 0: Lưu ảnh gốc
+                if (saveDebugImages)
+                {
+                    string step0Path = Path.Combine(debugPath, $"{timestamp}_step0_original.png");
+                    Cv2.ImWrite(step0Path, src);
+                    Debug.WriteLine($"[DEBUG] Saved: {step0Path}");
+                }
+
                 // 1️⃣ To grayscale
                 using var gray = new Mat();
                 Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+                
+                if (saveDebugImages)
+                {
+                    string step1Path = Path.Combine(debugPath, $"{timestamp}_step1_grayscale.png");
+                    Cv2.ImWrite(step1Path, gray);
+                    Debug.WriteLine($"[DEBUG] Saved: {step1Path}");
+                }
 
                 // 2️⃣ Làm mượt ảnh — loại bỏ noise cao tần
                 // GaussianBlur giúp làm mềm biên, tránh nhiễu trắng đen lẻ
                 Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(5, 5), 0);
+                
+                if (saveDebugImages)
+                {
+                    string step2Path = Path.Combine(debugPath, $"{timestamp}_step2_gaussian_blur.png");
+                    Cv2.ImWrite(step2Path, gray);
+                    Debug.WriteLine($"[DEBUG] Saved: {step2Path}");
+                }
 
                 // 3️⃣ Làm nổi bật cạnh (tùy chọn, tăng tương phản nếu label sáng không đều)
                 // Uncomment nếu cần tăng độ nét vùng sáng
@@ -53,6 +88,13 @@ namespace demo_ocr_label
                 using var binary = new Mat();
                 //Debug.WriteLine("Ngưỡng sáng nhận diện label: " + thresholdValue);
                 Cv2.Threshold(gray, binary, thresholdValue, 255, ThresholdTypes.Binary);
+                
+                if (saveDebugImages)
+                {
+                    string step3Path = Path.Combine(debugPath, $"{timestamp}_step3_binary_threshold.png");
+                    Cv2.ImWrite(step3Path, binary);
+                    Debug.WriteLine($"[DEBUG] Saved: {step3Path}");
+                }
 
                 // 4 Morphological operations để loại bỏ nhiễu & làm nét vùng label
                 using var morph = new Mat();
@@ -63,6 +105,12 @@ namespace demo_ocr_label
                 // Đóng (close): làm vùng label kín, liền mạch
                 Cv2.MorphologyEx(morph, morph, MorphTypes.Close, kernel, iterations: 2);
 
+                if (saveDebugImages)
+                {
+                    string step4Path = Path.Combine(debugPath, $"{timestamp}_step4_morphology.png");
+                    Cv2.ImWrite(step4Path, morph);
+                    Debug.WriteLine($"[DEBUG] Saved: {step4Path}");
+                }
 
                 // 3️⃣ Find contours (external)
                 Cv2.FindContours(binary, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
@@ -91,6 +139,23 @@ namespace demo_ocr_label
                 var ptsF = rect.Points();
                 var box = ptsF.Select(p => new OpenCvSharp.Point((int)Math.Round(p.X), (int)Math.Round(p.Y))).ToArray();
 
+                // Vẽ contour và bounding box lên ảnh để debug
+                if (saveDebugImages)
+                {
+                    Mat step5Visual = src.Clone();
+                    // Vẽ tất cả contours màu xanh lá
+                    Cv2.DrawContours(step5Visual, contours, -1, Scalar.Green, 2);
+                    // Vẽ contour lớn nhất màu đỏ
+                    Cv2.DrawContours(step5Visual, new[] { biggest }, -1, Scalar.Red, 3);
+                    // Vẽ MinAreaRect màu vàng
+                    Cv2.Polylines(step5Visual, new[] { box }, true, Scalar.Yellow, 2);
+                    
+                    string step5Path = Path.Combine(debugPath, $"{timestamp}_step5_contours_and_rect.png");
+                    Cv2.ImWrite(step5Path, step5Visual);
+                    Debug.WriteLine($"[DEBUG] Saved: {step5Path}");
+                    step5Visual.Dispose();
+                }
+
                 // 6️⃣ Crop vùng label theo bounding box (để kiểm tra QR)
                 var bound = Cv2.BoundingRect(biggest);
                 bound.X = Math.Max(0, bound.X);
@@ -99,6 +164,13 @@ namespace demo_ocr_label
                 bound.Height = Math.Min(src.Height - bound.Y, bound.Height);
 
                 using var labelRoi = new Mat(src, bound);
+                
+                if (saveDebugImages)
+                {
+                    string step6Path = Path.Combine(debugPath, $"{timestamp}_step6_cropped_label_roi.png");
+                    Cv2.ImWrite(step6Path, labelRoi);
+                    Debug.WriteLine($"[DEBUG] Saved: {step6Path}");
+                }
 
                 // 7️⃣ Dò QR code trong vùng label
                 string qrText = "";

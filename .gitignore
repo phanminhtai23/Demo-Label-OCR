@@ -1,5 +1,157 @@
+###################
+# Visual Studio
+###################
 .vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+###################
+# Build Results
+###################
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Project specific build folders
 demo_ocr_label/bin/
+demo_ocr_label/obj/
+**/obj/
+**/bin/
+
+# Ignore all build artifacts
+*.exe
+*.pdb
+*.dll.config
+*.cache
+*.props
+*.targets
+apphost.exe
+*.AssemblyInfo.cs
+*.AssemblyInfoInputs.cache
+*.GeneratedMSBuildEditorConfig.editorconfig
+*.assets.cache
+*.csproj.AssemblyReference.cache
+*.csproj.CoreCompileInputs.cache
+*.csproj.FileListAbsolute.txt
+*.csproj.GenerateResource.cache
+*.genruntimeconfig.cache
+*.sourcelink.json
+*.nuget.dgspec.json
+*.nuget.g.props
+*.nuget.g.targets
+project.assets.json
+project.nuget.cache
+project.lock.json
+project.fragment.lock.json
+
+###################
+# Native DLLs
+###################
 demo_ocr_label/native/
-demo_ocr_label.sln
+*.dll
+*.so
+*.dylib
+
+###################
+# Debug Images
+###################
+# Bỏ qua tất cả ảnh PNG trong thư mục resources/images (ảnh debug)
+demo_ocr_label/resources/images/*.png
+demo_ocr_label/resources/images/*.jpg
+demo_ocr_label/resources/images/*.jpeg
+
+# Giữ lại file README.md để hướng dẫn
+!demo_ocr_label/resources/images/README.md
+
+###################
+# Solution Files
+###################
+*.sln
+*.sln.cache
+
+###################
+# NuGet Packages
+###################
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+###################
+# Personal Notes
+###################
 note.txt
+notes.txt
+TODO.txt
+*.bak
+*.tmp
+
+###################
+# OS Files
+###################
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+###################
+# IDE Files
+###################
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+###################
+# Test Results
+###################
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+###################
+# Data Files
+###################
+# Bỏ qua file Excel nếu có dữ liệu nhạy cảm
+# data.xlsx
+
+###################
+# Logs
+###################
+*.log
+*.log.*
+logs/
