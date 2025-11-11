@@ -195,12 +195,19 @@ namespace demo_ocr_label
                 OpenCvSharp.Rect cropRect = new(x, y, labelWidth, labelHeight);
                 Mat cropped = new Mat(rotated, cropRect);
 
+
+                var PaddleCheck180 = Stopwatch.StartNew();
                 if (IsImageUpsideDown(cropped))
                 {
                     // 🔄 Xoay lại 180 độ
                     Cv2.Rotate(cropped, cropped, RotateFlags.Rotate180);
                     //Debug.WriteLine("🔄 Đã xoay lại 180° để chỉnh hướng chữ.");
+
+
                 }
+                PaddleCheck180.Stop();                       // dừng đếm
+                double ms3 = PaddleCheck180.ElapsedMilliseconds;
+                Debug.WriteLine($"Paddle check 180 and rotate time: {ms3:F2} ms");
 
                 // 🔹 6) Trả kết quả Bitmap
                 return MatToBitmap(cropped);
