@@ -52,6 +52,10 @@ namespace demo_ocr_label
         private List<string> colors = new List<string>();
 
         private int pauseTime = 0; // seconds
+        
+        // 💾 Kiểm soát lưu ảnh debug theo interval
+        private DateTime lastSaveTime = DateTime.MinValue;
+        private double saveIntervalSeconds = 1.0; // Lưu mỗi 1 giây
         public Form1()
         {
             InitializeComponent();
@@ -365,9 +369,19 @@ namespace demo_ocr_label
                 {
                     var ocrTime = Stopwatch.StartNew();
                     currentThreshold = (int)numericThreshold.Value;
+                    
+                    // 💾 Kiểm tra xem đã đủ thời gian để lưu ảnh chưa (mỗi 1 giây)
+                    bool shouldSaveDebugImages = (DateTime.Now - lastSaveTime).TotalSeconds >= saveIntervalSeconds;
+                    
                     // 1️⃣ Detect label trong vùng ROI
-                    // ⚙️ Đặt saveDebugImages = true để lưu ảnh debug tại mỗi bước
-                    var (rect, box, qrText) = LabelDetector.DetectLabelRegion(roi, currentThreshold, saveDebugImages: true);
+                    var (rect, box, qrText) = LabelDetector.DetectLabelRegion(roi, currentThreshold, saveDebugImages: shouldSaveDebugImages);
+                    
+                    // Cập nhật thời gian lưu nếu đã lưu
+                    if (shouldSaveDebugImages)
+                    {
+                        lastSaveTime = DateTime.Now;
+                        Debug.WriteLine($"[DEBUG] 📸 Đã lưu ảnh debug (interval: {saveIntervalSeconds}s)");
+                    }
 
                     using var mat = frame.Clone(); // frame gốc để vẽ overlay
 
