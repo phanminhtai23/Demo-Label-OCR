@@ -47,6 +47,11 @@ namespace demo_ocr_label
         //config.cls_infer = @"models\ch_ppocr_mobile_v2.0_cls_infer";
         //config.keys = @"models\ppocr_keys.txt";
 
+
+
+
+
+
         private List<string> models = new List<string>();
         private List<string> sizes = new List<string>();
         private List<string> colors = new List<string>();
