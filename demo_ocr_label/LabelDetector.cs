@@ -150,6 +150,7 @@ namespace demo_ocr_label
 
                 // 🔹 2) Xác định góc xoay (normalize cho đúng hướng)
                 float angle = rect.Angle;
+
                 if (rect.Size.Width < rect.Size.Height)
                 {
                     angle += 90;
@@ -159,11 +160,11 @@ namespace demo_ocr_label
                 if (angle >= 135 && angle <= 180)
                 {
                     angle -= 180;
-                    labelWidth = (int)rect.Size.Height; 
+                    labelWidth = (int)rect.Size.Height;
                     labelHeight = (int)rect.Size.Width;
                     //Debug.WriteLine($"Xoay -180, Angel = {angle}");
                 }
-                
+
                 if (angle > 90 && angle <= 135)
                 {
                     labelWidth = (int)rect.Size.Height;
@@ -177,8 +178,7 @@ namespace demo_ocr_label
 
                 // 🔹 4) Tạo ảnh xoay có cùng kích thước như ROI
                 Mat rotated = new Mat();
-                Cv2.WarpAffine(src, rotated, rotationMatrix, src.Size(),
-                    InterpolationFlags.Linear, BorderTypes.Replicate);
+                Cv2.WarpAffine(src, rotated, rotationMatrix, src.Size(), InterpolationFlags.Linear, BorderTypes.Replicate);
 
                 // 🔹 5) Cắt đúng vùng label (theo kích thước rect)
                 // (chuyển tâm về hệ toạ độ sau xoay)
@@ -195,17 +195,15 @@ namespace demo_ocr_label
                 OpenCvSharp.Rect cropRect = new(x, y, labelWidth, labelHeight);
                 Mat cropped = new Mat(rotated, cropRect);
 
-
                 var PaddleCheck180 = Stopwatch.StartNew();
                 if (IsImageUpsideDown(cropped))
                 {
                     // 🔄 Xoay lại 180 độ
                     Cv2.Rotate(cropped, cropped, RotateFlags.Rotate180);
                     //Debug.WriteLine("🔄 Đã xoay lại 180° để chỉnh hướng chữ.");
-
-
                 }
-                PaddleCheck180.Stop();                       // dừng đếm
+                PaddleCheck180.Stop();
+
                 double ms3 = PaddleCheck180.ElapsedMilliseconds;
                 Debug.WriteLine($"Paddle check 180 and rotate time: {ms3:F2} ms");
 
@@ -218,6 +216,8 @@ namespace demo_ocr_label
                 return null;
             }
         }
+
+
 
         // <summary>
         /// Kiểm tra ảnh có bị xoay ngược (180°) hay không.

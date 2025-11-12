@@ -1,0 +1,21 @@
+{
+  "bottomLeftComponent": {
+    "width": 0.8,
+    "height": 0.4
+  },
+  "aboveQrComponent": {
+    "khoangCach": 0.05,
+    "width": 0.5,
+    "height": 0.5
+  },
+  "modelParams": {
+    "det": true,
+    "cls": false,
+    "rec": true,
+    "det_db_thresh": 0.3,
+    "det_db_box_thresh": 0.5,
+    "cls_thresh": 0.9,
+    "cpu_math_library_num_threads": 6,
+    "det_db_score_mode": true
+  }
+}

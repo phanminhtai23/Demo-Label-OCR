@@ -97,3 +97,4 @@ D:\Project\WinForm\demo_ocr_label\demo_ocr_label\obj\Debug\net8.0-windows\demo_o
 D:\Project\WinForm\demo_ocr_label\demo_ocr_label\obj\Debug\net8.0-windows\demo_ocr_label.genruntimeconfig.cache
 D:\Project\WinForm\demo_ocr_label\demo_ocr_label\obj\Debug\net8.0-windows\ref\demo_ocr_label.dll
 D:\Project\WinForm\demo_ocr_label\demo_ocr_label\obj\Debug\net8.0-windows\demo_ocr_label.sourcelink.json
+D:\Project\WinForm\demo_ocr_label\demo_ocr_label\bin\Debug\net8.0-windows\config.json
