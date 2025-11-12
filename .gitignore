@@ -3,3 +3,55 @@ demo_ocr_label/bin/
 demo_ocr_label/native/
 demo_ocr_label.sln
 note.txt
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build output
+bin/
+obj/
+TestResults/
+
+# IDE khác
+.idea/
+*.sln.iml
+.vscode/
+
+# Ðóng gói / Publish
+demo_ocr_label/artifacts/
+demo_ocr_label/publish/
+*.nupkg
+*.snupkg
+
+# Logs / Temp
+*.log
+*.tlog
+*.tmp
+*.cache
+*.dmp
+
+# Code coverage
+*.coverage
+*.coveragexml
+demo_ocr_label/coverage*/
+
+# NuGet (legacy)
+demo_ocr_label/packages/
+!packages/build/
+
+# H? ði?u hành
+demo_ocr_label/Thumbs.db
+.DS_Store
+
+# Env / secrets (n?u dùng)
+.env
+.env.*
+demo_ocr_label/appsettings.*.local.json
+
+# Project-specific (tùy ch?n, xem ghi chú)
+demo_ocr_label/models/
+demo_ocr_label/native/

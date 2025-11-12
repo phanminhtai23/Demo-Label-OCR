@@ -1,11 +1,12 @@
 {
   "bottomLeftComponent": {
-    "width": 0.8,
-    "height": 0.4
+    "width": 0.7,
+    "height": 0.35
   },
   "aboveQrComponent": {
-    "khoangCach": 0.05,
-    "width": 0.5,
+    "doiTamSangPhai": 0.2,
+    "doiTamLenTren": 0.05,
+    "width": 0.6,
     "height": 0.5
   },
   "modelParams": {

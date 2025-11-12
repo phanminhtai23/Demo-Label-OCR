@@ -126,6 +126,7 @@ namespace demo_ocr_label
 
                 // 8️⃣ Chỉ trả về nếu có QR thật
                 if (!string.IsNullOrEmpty(qrText))
+                    //Debug.WriteLine($"✅ k phát hiện qrtexxt");
                     return (rect, box, qrText, qrPoints180, qrPoints);
 
                 return (null, null, null, null, null);
@@ -141,7 +142,7 @@ namespace demo_ocr_label
         /// Xoay và cắt label theo tọa độ rect trong ROI.
         /// Nhận vào: ROI bitmap, rect, box, qrPoints → trả về ảnh label đã xoay thẳng.
         /// </summary>
-        public Bitmap CropAndAlignLabel(Bitmap roi, RotatedRect rect, OpenCvSharp.Point[] box,
+        public (Bitmap BitMapCropped, OpenCvSharp.Point[] qrBox) CropAndAlignLabel(Bitmap roi, RotatedRect rect, OpenCvSharp.Point[] box,
                                 Point2f[] qrPoints180, Point2f[] qrPoints)
         {
             try
@@ -155,7 +156,7 @@ namespace demo_ocr_label
                 int labelWidth = (int)rect.Size.Width;
                 int labelHeight = (int)rect.Size.Height;
                 if (labelWidth <= 0 || labelHeight <= 0)
-                    return null;
+                    return (null, null);
 
                 // 🔹 2) Chuẩn hóa góc xoay
                 float angle = rect.Angle;
@@ -273,13 +274,15 @@ namespace demo_ocr_label
                 for (int i = 0; i < qrBox.Length; i++)
                     Cv2.Circle(cropped, qrBox[i], 4, new Scalar(0, 255, 0), -1);
 
-                // 🔹 13) Trả kết quả
-                return MatToBitmap(cropped);
+                Bitmap BitMapCropped = MatToBitmap(cropped);
+
+                 // 🔹 13) Trả kết quả
+                 return (BitMapCropped, qrBox);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[CropAndAlignLabel ERROR] {ex.Message}");
-                return null;
+                return (null, null);
             }
         }
 
