@@ -14,7 +14,11 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("demo_ocr_label")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+<<<<<<< HEAD
 [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0257e140ab8eec5a7a3a3a855f42e7791caeadc8")]
+=======
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+991a423d41f528ba9004107eb5bec43a37ce89cd")]
+>>>>>>> feat/qr-code
 [assembly: System.Reflection.AssemblyProductAttribute("demo_ocr_label")]
 [assembly: System.Reflection.AssemblyTitleAttribute("demo_ocr_label")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
