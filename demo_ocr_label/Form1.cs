@@ -432,8 +432,8 @@ namespace demo_ocr_label
                         Debug.WriteLine($"Cắt, xoay Label Time: {ms2:F2} ms");
 
                         ////3 DEBUG: luôn hiển thị ảnh cắt label
-                        //pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                        //pictureBox1.Image = aligned;
+                        pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
+                        pictureBox1.Image = aligned;
 
                         if (aligned != null)
                         //if (false)
