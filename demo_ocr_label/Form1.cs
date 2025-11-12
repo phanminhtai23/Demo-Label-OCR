@@ -371,7 +371,7 @@ namespace demo_ocr_label
                     
                     currentThreshold = (int)numericThreshold.Value;
                     // 1️⃣ Detect label trong vùng ROI
-                    var (rect, box, qrText, qrPoints) = LabelDetector.DetectLabelRegion(roi, currentThreshold);
+                    var (rect, box, qrText, qrPoints180, qrPoints) = LabelDetector.DetectLabelRegion(roi, currentThreshold);
 
                     using var mat = frame.Clone(); // frame gốc để vẽ overlay
 
@@ -425,8 +425,8 @@ namespace demo_ocr_label
 
                         }));
 
-                        var aligned = labelDetector.CropAndAlignLabel(roi, rect.Value, box, qrPoints);
-
+                        var aligned = labelDetector.CropAndAlignLabel(roi, rect.Value, box, qrPoints180, qrPoints);
+                        
                         CatXoayLabelTime.Stop();                       // dừng đếm
                         double ms2 = CatXoayLabelTime.ElapsedMilliseconds;
                         Debug.WriteLine($"Cắt, xoay Label Time: {ms2:F2} ms");
@@ -438,6 +438,7 @@ namespace demo_ocr_label
                         if (aligned != null)
                         //if (false)
                         {
+                            this.Invoke((Action)(() => ShowBitmap(aligned)));
                             //var ocrTime = Stopwatch.StartNew();
                             // 1️⃣ Gọi OCR trên vùng dưới bên trái
                             var (croppedImg, ocrTexts, minScore, text) = RunOcrOnBottomLeftQuarter(ocr, aligned);
