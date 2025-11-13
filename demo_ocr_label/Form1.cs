@@ -422,7 +422,7 @@ namespace demo_ocr_label
                     
                     currentThreshold = (int)numericThreshold.Value;
                     // 1️⃣ Detect label trong vùng ROI
-                    var (rect, box, qrText, qrPoints180, qrPoints) = LabelDetector.DetectLabelRegion(roi, currentThreshold);
+                    var (rect, box, qrText, qrPoints180, qrPoints, strategyUsed) = LabelDetector.DetectLabelRegion(roi, currentThreshold);
 
                     using var mat = frame.Clone(); // frame gốc để vẽ overlay
 
@@ -444,12 +444,15 @@ namespace demo_ocr_label
 
                         // 3️⃣ Vẽ khung label và tâm trên frame full
                         Cv2.Polylines(mat, new[] { fullBox }, true, Scalar.Lime, 2);
-                        //Cv2.Circle(mat,
-                        //    new OpenCvSharp.Point(
-                        //        (int)(rect.Value.Center.X + mapped.X),
-                        //        (int)(rect.Value.Center.Y + mapped.Y)),
-                        //    4, Scalar.Red, -1);
-
+                        
+                        // 🎯 Hiển thị Strategy được sử dụng
+                        string strategyText = $"Strategy: {strategyUsed ?? "UNKNOWN"}";
+                        var textPosition = new OpenCvSharp.Point(mapped.X, Math.Max(0, mapped.Y - 35));
+                        Cv2.PutText(mat, strategyText,
+                            textPosition,
+                            HersheyFonts.HersheySimplex, 0.6, Scalar.Cyan, 2);
+                        
+                        // Hiển thị góc xoay
                         Cv2.PutText(mat, $"Angle={rect.Value.Angle:F1}",
                             new OpenCvSharp.Point(mapped.X, Math.Max(0, mapped.Y - 10)),
                             HersheyFonts.HersheySimplex, 0.7, Scalar.Yellow, 2);
@@ -483,19 +486,21 @@ namespace demo_ocr_label
                         Debug.WriteLine($"Cắt, xoay Label Time: {ms2:F2} ms");
 
                         ////3 DEBUG: luôn hiển thị ảnh cắt label
-                        pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                        pictureBox1.Image = aligned;
+                        // ✅ Clone để tránh lỗi "Object is currently in use elsewhere"
+                        Bitmap alignedClone = (Bitmap)aligned.Clone();
 
                         if (aligned != null)
                         //if (false)
                         {
-                            this.Invoke((Action)(() => ShowBitmap(aligned)));
+                            // 🔇 TẠM THỜI ẨN: Không hiển thị popup debug ảnh aligned
+                            //this.Invoke((Action)(() => ShowBitmap(aligned)));
                             //var ocrTime = Stopwatch.StartNew();
                             // 1️⃣ Gọi OCR trên vùng dưới bên trái
 
+                            // 🔇 TẠM THỜI ẨN: Không hiển thị QR bounding box
                             //ShowQrBox(aligned, qrBox);
 
-                            var (mergedCrop, ocrTexts, minScore, debugText) = RunOcrOnMergedBottomLeftAndAboveQr(ocr, aligned);
+                            var (mergedCrop, ocrTexts, minScore, debugText) = RunOcrOnMergedBottomLeftAndAboveQr(ocr, aligned, qrPoints180);
 
                             //ocrTime.Stop(); // dừng đo
                             //double ocrTimeMs = ocrTime.Elapsed.TotalMilliseconds;
@@ -536,8 +541,13 @@ namespace demo_ocr_label
                                 }));
 
                                 // 3 hiển thị ảnh debug label đã xoay và cắt
-                                pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                                pictureBox1.Image = aligned;
+                                pictureBox1.BeginInvoke(new Action(() =>
+                                {
+                                    var oldImg = pictureBox1.Image;
+                                    pictureBox1.SizeMode = PictureBoxSizeMode.Zoom;
+                                    pictureBox1.Image = alignedClone; // ✅ Dùng clone
+                                    oldImg?.Dispose(); // ✅ Dispose ảnh cũ
+                                }));
 
                                 cameraBox.BeginInvoke(new Action(() =>
                                 {
@@ -551,20 +561,19 @@ namespace demo_ocr_label
                                 // 4 hiển thị ảnh cắt 1/4
                                 if (mergedCrop != null)
                                 {
+                                    // ✅ Clone để tránh lỗi GDI+
+                                    Bitmap mergedCropClone = (Bitmap)mergedCrop.Clone();
+                                    
                                     pictureBox2.BeginInvoke(new Action(() =>
                                     {
+                                        var oldImg = pictureBox2.Image;
                                         pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                                        pictureBox2.Image?.Dispose();
-                                        if (mergedCrop != null)
-                                        {
-                                            pictureBox2.BeginInvoke(new Action(() =>
-                                            {
-                                                pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                                                pictureBox2.Image?.Dispose();
-                                                pictureBox2.Image = mergedCrop; // không cần clone nữa
-                                            }));
-                                        }
+                                        pictureBox2.Image = mergedCropClone; // ✅ Dùng clone
+                                        oldImg?.Dispose(); // ✅ Dispose ảnh cũ
                                     }));
+                                    
+                                    // ✅ Dispose ảnh gốc sau khi clone
+                                    mergedCrop.Dispose();
                                 }
 
                                 //string combined = string.Join(" | ", ocrTexts.Select(tb => $"{tb.Text}: {tb.Score:F2}"));
@@ -593,6 +602,9 @@ namespace demo_ocr_label
                                 Debug.WriteLine("text result k đúng định dạng");
 
                             }
+                            
+                            // ✅ Dispose aligned sau khi sử dụng xong
+                            aligned?.Dispose();
                         }
                     }
                     else // không detec thấy label
@@ -668,7 +680,7 @@ namespace demo_ocr_label
 
         // Sử dụng Paddle OCR ở 1/4 góc dưới bên trái
         public (Bitmap mergedCrop, List<string> texts, float minScore, string DebugText)
-        RunOcrOnMergedBottomLeftAndAboveQr(PaddleOCREngine ocr, Bitmap aligned)
+        RunOcrOnMergedBottomLeftAndAboveQr(PaddleOCREngine ocr, Bitmap aligned, Point2f[] qrPoints180)
         {
             Bitmap bottomLeftCrop = null;
             Bitmap aboveQrCrop = null;
@@ -681,6 +693,12 @@ namespace demo_ocr_label
                 if (ocr == null || aligned == null)
                     return (null, texts, -999, "[❌] Input null");
 
+                if (qrPoints180 == null || qrPoints180.Length < 4)
+                {
+                    Debug.WriteLine("[⚠️] Không có tọa độ QR code hợp lệ.");
+                    return (null, texts, -999, "[⚠️] No valid QR points provided.");
+                }
+
                 int width = aligned.Width;
                 int height = aligned.Height;
 
@@ -690,16 +708,10 @@ namespace demo_ocr_label
                     System.Drawing.Imaging.PixelFormat.Format24bppRgb);
 
                 using var mat = BitmapToMat(safeAligned);
-                // === 2️⃣ Detect QR code trên ảnh grayscale ===
-                var qrDetector = new QRCodeDetector();
-                string qrData = qrDetector.DetectAndDecode(mat, out OpenCvSharp.Point2f[] points);
-
-                if (string.IsNullOrEmpty(qrData) || points == null || points.Length < 4)
-                {
-                    Debug.WriteLine("[⚠️] Không phát hiện được QR code trong ảnh grayscale.");
-                    safeAligned.Dispose();
-                    return (null, texts, -999, "[⚠️] No QR detected in grayscale image.");
-                }
+                
+                // === 2️⃣ Sử dụng QR points đã có (không detect lại) ===
+                var points = qrPoints180; // QR points trong hệ tọa độ aligned
+                Debug.WriteLine($"[✅] Sử dụng QR points đã có: [{points[0].X:F1},{points[0].Y:F1}] [{points[1].X:F1},{points[1].Y:F1}] [{points[2].X:F1},{points[2].Y:F1}] [{points[3].X:F1},{points[3].Y:F1}]");
 
                 // === 3️⃣ Vùng góc dưới bên trái ===
                 Rectangle roiBottomLeft = new Rectangle(
@@ -717,78 +729,85 @@ namespace demo_ocr_label
                 }
                 bottomLeftCrop = safeAligned.Clone(roiBottomLeft, safeAligned.PixelFormat);
 
-                // === 4️⃣ Cắt vùng "phía trên cạnh nối giữa points[0] & points[1]" ===
+                // === 4️⃣ Cắt vùng "BÊN TRÁI QR" (label text nằm bên trái, canh giữa) ===
                 var p0 = points[0]; // top-left
                 var p1 = points[1]; // top-right
                 var p2 = points[2]; // bottom-right
                 var p3 = points[3]; // bottom-left
 
-                // Vector cạnh trên & cạnh phải của QR
-                var topVec = new OpenCvSharp.Point2f(p1.X - p0.X, p1.Y - p0.Y);
-                var rightVec = new OpenCvSharp.Point2f(p2.X - p1.X, p2.Y - p1.Y);
+                // 🔹 1) Tính các vector của QR (xử lý trường hợp bị nghiêng)
+                var topVec = new OpenCvSharp.Point2f(p1.X - p0.X, p1.Y - p0.Y);      // Cạnh trên (→)
+                var leftVec = new OpenCvSharp.Point2f(p3.X - p0.X, p3.Y - p0.Y);     // Cạnh trái (↓)
+                
                 float qrWidth = (float)Math.Sqrt(topVec.X * topVec.X + topVec.Y * topVec.Y);
-                float qrHeight = (float)Math.Sqrt(rightVec.X * rightVec.X + rightVec.Y * rightVec.Y);
+                float qrHeight = (float)Math.Sqrt(leftVec.X * leftVec.X + leftVec.Y * leftVec.Y);
 
-                // Vector pháp tuyến hướng lên (vuông góc cạnh trên)
-                var normal = new OpenCvSharp.Point2f(topVec.Y, -topVec.X);
-                float len = (float)Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y);
-                normal.X /= len;
-                normal.Y /= len;
+                // 🔹 2) Vector đơn vị (normalized)
+                var dirRight = new OpenCvSharp.Point2f(topVec.X / qrWidth, topVec.Y / qrWidth);  // Hướng phải (→)
+                var dirDown = new OpenCvSharp.Point2f(leftVec.X / qrHeight, leftVec.Y / qrHeight); // Hướng xuống (↓)
+                var dirLeft = new OpenCvSharp.Point2f(-dirRight.X, -dirRight.Y);   // Hướng trái (←)
 
-                // Các thông số vùng cắt
-                float offset = (float)(0.05 * qrWidth);  // khoảng cách lên trên
-                float widthAbove = (float)(0.5 * qrWidth);   // rộng sang trái
-                float heightAbove = (float)(0.5 * qrHeight); // dài lên trên
+                // 🔹 3) Tham số vùng label (QR chiếm 1/3 chiều rộng nhãn → label rộng gấp ~3 lần QR)
+                float labelWidth = qrWidth * 3.0f;   // Label rộng = 3 × QR (vì QR chiếm 1/3 nhãn)
+                float labelHeight = qrHeight;         // Label cao = QR height (canh giữa)
+                float offset = (float)(fileConfig.aboveQrComponent.khoangCach * qrWidth);   // Khoảng cách với QR
 
-                // Vector đơn vị theo hướng cạnh trên (trái → phải)
-                var dir = new OpenCvSharp.Point2f(topVec.X / qrWidth, topVec.Y / qrWidth);
+                // 🔹 4) Tính 4 góc của vùng label (bên trái QR, canh giữa)
+                // Gốc tọa độ: Tâm cạnh trái của QR
+                var qrLeftCenter = new OpenCvSharp.Point2f(
+                    (p0.X + p3.X) / 2.0f,
+                    (p0.Y + p3.Y) / 2.0f
+                );
 
-                // dời sang phải
-                float shiftDist = 0.2f * qrWidth;
+                // Top-Right của label = qrLeftCenter dịch trái 1 chút (offset)
+                var labelTopRight = new OpenCvSharp.Point2f(
+                    qrLeftCenter.X + dirLeft.X * offset,
+                    qrLeftCenter.Y + dirLeft.Y * offset
+                );
 
+                // 4 góc label (hình chữ nhật quay theo góc QR)
+                var labelTopLeft = new OpenCvSharp.Point2f(
+                    labelTopRight.X + dirLeft.X * labelWidth,
+                    labelTopRight.Y + dirLeft.Y * labelWidth
+                );
 
-                // Gốc bắt đầu từ góc phải trên QR (p1)
-                var baseTopRight = new OpenCvSharp.Point2f(
-                    p1.X + normal.X * offset + dir.X * shiftDist,
-                    p1.Y + normal.Y * offset + dir.Y * shiftDist);
+                var labelBottomRight = new OpenCvSharp.Point2f(
+                    labelTopRight.X + dirDown.X * labelHeight,
+                    labelTopRight.Y + dirDown.Y * labelHeight
+                );
 
-                // Vùng cắt sẽ kéo lên trên (normal hướng lên) và sang trái (ngược hướng dir)
-                var rectTopRight = baseTopRight;
-                var rectTopLeft = new OpenCvSharp.Point2f(
-                    rectTopRight.X - dir.X * widthAbove,
-                    rectTopRight.Y - dir.Y * widthAbove);
+                var labelBottomLeft = new OpenCvSharp.Point2f(
+                    labelTopLeft.X + dirDown.X * labelHeight,
+                    labelTopLeft.Y + dirDown.Y * labelHeight
+                );
 
-                var rectBottomRight = new OpenCvSharp.Point2f(
-                    rectTopRight.X + normal.X * heightAbove,
-                    rectTopRight.Y + normal.Y * heightAbove);
+                Debug.WriteLine($"📐 QR geometry: width={qrWidth:F1}, height={qrHeight:F1}");
+                Debug.WriteLine($"📐 Label region: width={labelWidth:F1} (3×QR), height={labelHeight:F1}, offset={offset:F1}");
 
-                var rectBottomLeft = new OpenCvSharp.Point2f(
-                    rectTopLeft.X + normal.X * heightAbove,
-                    rectTopLeft.Y + normal.Y * heightAbove);
-
-                // Warp Perspective để cắt vùng
+                // 🔹 5) Warp Perspective để cắt vùng label (xử lý nghiêng)
                 OpenCvSharp.Point2f[] srcQuad =
                 {
-    rectTopLeft,
-    rectTopRight,
-    rectBottomRight,
-    rectBottomLeft
-};
+                    labelTopLeft,
+                    labelTopRight,
+                    labelBottomRight,
+                    labelBottomLeft
+                };
+                
                 OpenCvSharp.Point2f[] dstQuad =
                 {
-    new(0, heightAbove),
-    new(widthAbove, heightAbove),
-    new(widthAbove, 0),
-    new(0, 0)
-};
+                    new(0, 0),
+                    new(labelWidth, 0),
+                    new(labelWidth, labelHeight),
+                    new(0, labelHeight)
+                };
 
                 var M = Cv2.GetPerspectiveTransform(srcQuad, dstQuad);
-                var croppedTopRight = new Mat();
-                Cv2.WarpPerspective(mat, croppedTopRight, M, new OpenCvSharp.Size(widthAbove, heightAbove),
+                var croppedLeftLabel = new Mat();
+                Cv2.WarpPerspective(mat, croppedLeftLabel, M, new OpenCvSharp.Size(labelWidth, labelHeight),
                     InterpolationFlags.Linear, BorderTypes.Replicate);
 
                 // Convert sang Bitmap
-                aboveQrCrop = MatToBitmap(croppedTopRight);
+                aboveQrCrop = MatToBitmap(croppedLeftLabel);
 
                 // === 5️⃣ Ghép ảnh ===
                 int mergedWidth = Math.Max(aboveQrCrop.Width, bottomLeftCrop.Width);
