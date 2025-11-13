@@ -35,6 +35,9 @@ namespace demo_ocr_label
         // 🔹 Có nhận diện hướng chữ (Classification)
         public bool cls { get; set; } = false;
 
+        // 🔹 Sử dụng bộ phân loại hướng chữ (Angle Classifier)
+        public bool use_angle_cls { get; set; }
+
         // 🔹 Có nhận diện nội dung chữ (Recognition)
         public bool rec { get; set; } = true;
 

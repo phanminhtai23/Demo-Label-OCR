@@ -12,6 +12,7 @@
   "modelParams": {
     "det": true,
     "cls": false,
+    "use_angle_cls": true,
     "rec": true,
     "det_db_thresh": 0.3,
     "det_db_box_thresh": 0.5,

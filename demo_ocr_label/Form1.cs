@@ -996,6 +996,7 @@ namespace demo_ocr_label
 
                 det = fileConfig.modelParams.det,
                 cls = fileConfig.modelParams.cls,
+                use_angle_cls = fileConfig.modelParams.use_angle_cls,
                 rec = fileConfig.modelParams.rec,
                 det_db_thresh = fileConfig.modelParams.det_db_thresh,
                 det_db_box_thresh = fileConfig.modelParams.det_db_box_thresh,

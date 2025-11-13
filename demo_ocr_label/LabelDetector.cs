@@ -264,15 +264,17 @@ namespace demo_ocr_label
                     .Select(p => new OpenCvSharp.Point((int)Math.Round(p.X), (int)Math.Round(p.Y)))
                     .ToArray();
 
-                for (int i = 0; i < qrBox.Length; i++)
-                {
-                    qrBox[i].X = Math.Max(0, Math.Min(qrBox[i].X, cropped.Width - 1));
-                    qrBox[i].Y = Math.Max(0, Math.Min(qrBox[i].Y, cropped.Height - 1));
-                }
 
-                Cv2.Polylines(cropped, new[] { qrBox }, true, new Scalar(0, 0, 255), 2);
-                for (int i = 0; i < qrBox.Length; i++)
-                    Cv2.Circle(cropped, qrBox[i], 4, new Scalar(0, 255, 0), -1);
+                // DEBUG: Vẽ box QR lên ảnh cropped
+                //for (int i = 0; i < qrBox.Length; i++)
+                //{
+                //    qrBox[i].X = Math.Max(0, Math.Min(qrBox[i].X, cropped.Width - 1));
+                //    qrBox[i].Y = Math.Max(0, Math.Min(qrBox[i].Y, cropped.Height - 1));
+                //}
+
+                //Cv2.Polylines(cropped, new[] { qrBox }, true, new Scalar(0, 0, 255), 2);
+                //for (int i = 0; i < qrBox.Length; i++)
+                //    Cv2.Circle(cropped, qrBox[i], 4, new Scalar(0, 255, 0), -1);
 
                 Bitmap BitMapCropped = MatToBitmap(cropped);
 
