@@ -3,6 +3,7 @@ demo_ocr_label/bin/
 demo_ocr_label/native/
 demo_ocr_label.sln
 note.txt
+debug_imgs/
 
 # Visual Studio
 .vs/
@@ -16,12 +17,12 @@ bin/
 obj/
 TestResults/
 
-# IDE khác
+# IDE khï¿½c
 .idea/
 *.sln.iml
 .vscode/
 
-# Ðóng gói / Publish
+# ï¿½ï¿½ng gï¿½i / Publish
 demo_ocr_label/artifacts/
 demo_ocr_label/publish/
 *.nupkg
@@ -43,15 +44,15 @@ demo_ocr_label/coverage*/
 demo_ocr_label/packages/
 !packages/build/
 
-# H? ði?u hành
+# H? ï¿½i?u hï¿½nh
 demo_ocr_label/Thumbs.db
 .DS_Store
 
-# Env / secrets (n?u dùng)
+# Env / secrets (n?u dï¿½ng)
 .env
 .env.*
 demo_ocr_label/appsettings.*.local.json
 
-# Project-specific (tùy ch?n, xem ghi chú)
+# Project-specific (tï¿½y ch?n, xem ghi chï¿½)
 demo_ocr_label/models/
 demo_ocr_label/native/

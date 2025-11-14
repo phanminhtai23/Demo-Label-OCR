@@ -19,5 +19,15 @@
     "cls_thresh": 0.9,
     "cpu_math_library_num_threads": 6,
     "det_db_score_mode": true
+  },
+  "labelRectangle": {
+    "up": 1,
+    "down": 2.5,
+    "left": 3.8,
+    "right": 1.5
+  },
+  "systemArivables": {
+    "debugMode": true,
+    "showTime": false
   }
 }

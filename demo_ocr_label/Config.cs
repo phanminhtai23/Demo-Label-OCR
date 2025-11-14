@@ -14,6 +14,10 @@ namespace demo_ocr_label
         public Component aboveQrComponent { get; set; }
         // các tham số của mô hình PadlleOCR
         public PaddleOCRParams modelParams { get; set; }
+
+        public systemArivables systemArivables { get; set; }
+
+        public labelRectangle labelRectangle { get; set; }
     }
 
 
@@ -59,5 +63,18 @@ namespace demo_ocr_label
         // tính score dựa trên đa giác, chính xách hơn nhưng chậm hơn xíu
         public bool det_db_score_mode { get; set; } = false; 
 
+    }
+    public class systemArivables
+    {
+        public bool debugMode { get; set; } = true;
+        public bool showTime { get; set; } = false;
+    }
+
+    public class labelRectangle
+    {
+        public float up { get; set; }
+        public float down { get; set; }
+        public float left { get; set; }
+        public float right { get; set; }
     }
 }

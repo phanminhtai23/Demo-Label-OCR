@@ -5,25 +5,27 @@ using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Windows.Forms;
 
 namespace demo_ocr_label
 {
     public class LabelDetector
     {
-        public LabelDetector()
-        {
-            // Không cần tham số nữa
-        }
+
         /// <summary>
-        /// Detect label similar to the provided Python implementation.
-        /// Input: Bitmap (BGR)
-        /// Output: (rotatedRect, boxPoints, qrText, qrPoints) or (null, null, null, null) if not found
+        /// Xác định tọa độ label, coi label có nằm trong Guild Box không,
+        /// Input: Bitmap (BGR), tọa độ QR code
+        /// Output: (rotatedRect, boxPoints, qrText, qrPoints) or (null, null, null, null) nếu label không nằm trong Guild Box
         /// </summary>
-        public static (RotatedRect? rect, OpenCvSharp.Point[]? box, string? qrText, Point2f[]? qrPoints180, Point2f[]? qrPoints)
-            DetectLabelRegion(Bitmap inputBmp, int thresholdValue = 150)
+        //public static (, OpenCvSharp.Point[]? box, string? qrText, Point2f[]? qrPoints180, Point2f[]? qrPoints1)
+        public static (RotatedRect? rect, Point2f[] rectPoints, Bitmap DebugBitMap,bool rectInGuildlBox) DetectLabelRegionWithQrCode(Bitmap inputBmp, Point2f[] qrPoints)
         {
-            if (inputBmp == null)
-                return (null, null, null, null, null);
+            //if (inputBmp == null)
+            //    return (null, null);
+
+            // Độ dài cạnh QR code
+            float qrSideLength = (float)Point2f.Distance(qrPoints[1], qrPoints[0]);
+
 
             // Convert Bitmap -> Mat (BGR)
             Mat src;
@@ -33,116 +35,156 @@ namespace demo_ocr_label
                 src = Cv2.ImDecode(ms.ToArray(), ImreadModes.Color);
             }
 
-            try
+            if (qrPoints != null)
             {
-                // 1️⃣ To grayscale
-                using var gray = new Mat();
-                Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+                // Tính hình chữ nhật bao quanh
+                Point2f[] rectPoints = RectangleAroundQR.GetRectangleAroundQR(qrPoints, offsetX: 0.0f, offsetY: 0.00f, widthScale: 4f, heightScale: 2f);
+                
+                // Vẽ hình chữ nhật lên Guild Box để debug
+                Bitmap debugBmp = RectangleAroundQR.DrawDebugRectangle(inputBmp, qrPoints, rectPoints);
+                // Kiểm tra null trước khi gọi
+                //if (form1Reference != null)
+                //{
+                //    formform1Reference.ShowBitmapCoDung(debugBmp);
+                //}
+                // Hiển thị hoặc lưu file
+                // pictureBox.Image = debugBmp;
+                Debug.WriteLine("Vẽ hình chữ nhật bao quanh QR code");
+                //debugBmp.Save("D:\Project\WinForm\demo_ocr_label\debug_imgs\veHCN.jpg");
 
-                // 2️⃣ Làm mượt ảnh — loại bỏ noise cao tần
-                // GaussianBlur giúp làm mềm biên, tránh nhiễu trắng đen lẻ
-                Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(5, 5), 0);
-
-                // 3️⃣ Làm nổi bật cạnh (tùy chọn, tăng tương phản nếu label sáng không đều)
-                // Uncomment nếu cần tăng độ nét vùng sáng
-                // Cv2.Laplacian(gray, gray, MatType.CV_8U, 3);
-
-                // 3 Binary threshold (label trắng nên threshold cao)
-                using var binary = new Mat();
-                //Debug.WriteLine("Ngưỡng sáng nhận diện label: " + thresholdValue);
-                Cv2.Threshold(gray, binary, thresholdValue, 255, ThresholdTypes.Binary);
-
-                // 4 Morphological operations để loại bỏ nhiễu & làm nét vùng label
-                using var morph = new Mat();
-                Mat kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-
-                // Mở (open): xóa điểm nhiễu nhỏ
-                Cv2.MorphologyEx(binary, morph, MorphTypes.Open, kernel, iterations: 1);
-                // Đóng (close): làm vùng label kín, liền mạch
-                Cv2.MorphologyEx(morph, morph, MorphTypes.Close, kernel, iterations: 2);
-
-
-                // 3️⃣ Find contours (external)
-                Cv2.FindContours(binary, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
-                if (contours == null || contours.Length == 0)
-                    return (null, null, null, null, null);
-
-                // 4️⃣ Chọn contour lớn nhất
-                OpenCvSharp.Point[] biggest = null!;
-                double maxArea = 0;
-                foreach (var c in contours)
+                // Kiểm tra xem 4 đỉnh có nằm trong ROI box không
+                // ROI box là inputBmp (ảnh đã crop), nên kiểm tra trong bounds (0, 0, width, height)
+                bool rectInGuildlBox = true;
+                float roiWidth = inputBmp.Width;
+                float roiHeight = inputBmp.Height;
+                foreach (var point in rectPoints)
                 {
-                    double area = Cv2.ContourArea(c);
-                    if (area > maxArea)
+                    if (point.X < 0 || point.X >= roiWidth || point.Y < 0 || point.Y >= roiHeight)
                     {
-                        maxArea = area;
-                        biggest = c;
+                        rectInGuildlBox = false;
+                        break;
                     }
                 }
 
-                //if (biggest == null || maxArea < 1000)
-                 if (biggest == null)
-                     return (null, null, null, null, null);
+                // tính react
+                RotatedRect rect = Cv2.MinAreaRect(rectPoints);
 
-                // 5️⃣ Lấy MinAreaRect và box
-                var rect = Cv2.MinAreaRect(biggest);
-                var ptsF = rect.Points();
-                var box = ptsF.Select(p => new OpenCvSharp.Point((int)Math.Round(p.X), (int)Math.Round(p.Y))).ToArray();
-
-                // 6️⃣ Crop vùng label theo bounding box (để kiểm tra QR)
-                var bound = Cv2.BoundingRect(biggest);
-                bound.X = Math.Max(0, bound.X);
-                bound.Y = Math.Max(0, bound.Y);
-                bound.Width = Math.Min(src.Width - bound.X, bound.Width);
-                bound.Height = Math.Min(src.Height - bound.Y, bound.Height);
-
-                using var labelRoi = new Mat(src, bound);
-
-                // 7️⃣ Dò QR code trong vùng label
-                string qrText = "";
-                Point2f[] qrPoints180 = null!; // Đổi tên để rõ nghĩa
-                Point2f[] qrPoints = null!;
-                try
-                {
-                    using var qr = new QRCodeDetector();
-                    using var straight = new Mat();
-
-                    qrText = qr.DetectAndDecode(labelRoi, out qrPoints180, straight);
-
-                    if (qrPoints180 != null)
-                    {
-                        qrPoints = qrPoints180;
-                        for (int i = 0; i < qrPoints.Length; i++)
-                        {
-                            qrPoints[i].X += bound.X;
-                            qrPoints[i].Y += bound.Y;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[QR ERROR] {ex.Message}");
-                }
-
-                // 8️⃣ Chỉ trả về nếu có QR thật
-                if (!string.IsNullOrEmpty(qrText))
-                    //Debug.WriteLine($"✅ k phát hiện qrtexxt");
-                    return (rect, box, qrText, qrPoints180, qrPoints);
-
-                return (null, null, null, null, null);
+                return (rect, rectPoints, debugBmp, rectInGuildlBox);
             }
-            finally
-            {
-                src.Dispose();
-            }
+
+            return (null, null, null, false);
+
+            //try
+            //{
+            //    // 1️⃣ To grayscale
+            //    using var gray = new Mat();
+            //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+
+            //    // 2️⃣ Làm mượt ảnh — loại bỏ noise cao tần
+            //    // GaussianBlur giúp làm mềm biên, tránh nhiễu trắng đen lẻ
+            //    Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(5, 5), 0);
+
+            //    // 3️⃣ Làm nổi bật cạnh (tùy chọn, tăng tương phản nếu label sáng không đều)
+            //    // Uncomment nếu cần tăng độ nét vùng sáng
+            //    // Cv2.Laplacian(gray, gray, MatType.CV_8U, 3);
+
+            //    // 3 Binary threshold (label trắng nên threshold cao)
+            //    using var binary = new Mat();
+            //    //Debug.WriteLine("Ngưỡng sáng nhận diện label: " + thresholdValue);
+            //    Cv2.Threshold(gray, binary, thresholdValue, 255, ThresholdTypes.Binary);
+
+            //    // 4 Morphological operations để loại bỏ nhiễu & làm nét vùng label
+            //    using var morph = new Mat();
+            //    Mat kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
+
+            //    // Mở (open): xóa điểm nhiễu nhỏ
+            //    Cv2.MorphologyEx(binary, morph, MorphTypes.Open, kernel, iterations: 1);
+            //    // Đóng (close): làm vùng label kín, liền mạch
+            //    Cv2.MorphologyEx(morph, morph, MorphTypes.Close, kernel, iterations: 2);
+
+
+            //    // 3️⃣ Find contours (external)
+            //    Cv2.FindContours(binary, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+            //    if (contours == null || contours.Length == 0)
+            //        return (null, null, null, null, null);
+
+            //    // 4️⃣ Chọn contour lớn nhất
+            //    OpenCvSharp.Point[] biggest = null!;
+            //    double maxArea = 0;
+            //    foreach (var c in contours)
+            //    {
+            //        double area = Cv2.ContourArea(c);
+            //        if (area > maxArea)
+            //        {
+            //            maxArea = area;
+            //            biggest = c;
+            //        }
+            //    }
+
+            //    //if (biggest == null || maxArea < 1000)
+            //     if (biggest == null)
+            //         return (null, null, null, null, null);
+
+            //    // 5️⃣ Lấy MinAreaRect và box
+            //    var rect = Cv2.MinAreaRect(biggest);
+            //    var ptsF = rect.Points();
+            //    var box = ptsF.Select(p => new OpenCvSharp.Point((int)Math.Round(p.X), (int)Math.Round(p.Y))).ToArray();
+
+            //    // 6️⃣ Crop vùng label theo bounding box (để kiểm tra QR)
+            //    var bound = Cv2.BoundingRect(biggest);
+            //    bound.X = Math.Max(0, bound.X);
+            //    bound.Y = Math.Max(0, bound.Y);
+            //    bound.Width = Math.Min(src.Width - bound.X, bound.Width);
+            //    bound.Height = Math.Min(src.Height - bound.Y, bound.Height);
+
+            //    using var labelRoi = new Mat(src, bound);
+
+            //    // 7️⃣ Dò QR code trong vùng label
+            //    string qrText = "";
+            //    Point2f[] qrPoints180 = null!; // Đổi tên để rõ nghĩa
+            //    Point2f[] qrPoints = null!;
+            //    try
+            //    {
+            //        using var qr = new QRCodeDetector();
+            //        using var straight = new Mat();
+
+            //        qrText = qr.DetectAndDecode(labelRoi, out qrPoints180, straight);
+
+            //        if (qrPoints180 != null)
+            //        {
+            //            qrPoints = qrPoints180;
+            //            for (int i = 0; i < qrPoints.Length; i++)
+            //            {
+            //                qrPoints[i].X += bound.X;
+            //                qrPoints[i].Y += bound.Y;
+            //            }
+            //        }
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        System.Diagnostics.Debug.WriteLine($"[QR ERROR] {ex.Message}");
+            //    }
+
+            //    // 8️⃣ Chỉ trả về nếu có QR thật
+            //    if (!string.IsNullOrEmpty(qrText))
+            //        //Debug.WriteLine($"✅ k phát hiện qrtexxt");
+            //        return (rect, box, qrText, qrPoints180, qrPoints);
+
+            //    return (null, null, null, null, null);
+            //}
+            //finally
+            //{
+            //    src.Dispose();
+            //}
         }
+
 
 
         /// <summary>
         /// Xoay và cắt label theo tọa độ rect trong ROI.
         /// Nhận vào: ROI bitmap, rect, box, qrPoints → trả về ảnh label đã xoay thẳng.
         /// </summary>
-        public (Bitmap BitMapCropped, OpenCvSharp.Point[] qrBox) CropAndAlignLabel(Bitmap roi, RotatedRect rect, OpenCvSharp.Point[] box,
+        public (Bitmap BitMapCropped, OpenCvSharp.Point[] qrBox) CropAndAlignLabel(Bitmap roi, RotatedRect rect, OpenCvSharp.Point2f[] box,
                                 Point2f[] qrPoints180, Point2f[] qrPoints)
         {
             try
@@ -288,23 +330,52 @@ namespace demo_ocr_label
             }
         }
 
+        /// <summary>
+        /// Tìm QR code trong vùng ROI.
+        /// </summary>
+        /// <param name="roi">Vùng ảnh cần tìm QR code</param>
+        /// <returns>Tọa độ 4 điểm của QR code (Point2f[]) nếu tìm thấy, null nếu không tìm thấy</returns>
+        public static (Point2f[]? qrPoints, string qrText) DetectQRCode(Bitmap roi)
+        {
+            if (roi == null)
+                return (null, null);
 
+            try
+            {
+                using var mat = BitmapToMat(roi);
+                using var qr = new QRCodeDetector();
+                using var straight = new Mat();
 
+                string qrText = qr.DetectAndDecode(mat, out Point2f[] qrPoints, straight);
+
+                if (!string.IsNullOrEmpty(qrText) && qrPoints != null && qrPoints.Length == 4)
+                    return (qrPoints, qrText);
+
+                return (null, null);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[DetectQRCode ERROR] {ex.Message}");
+                return (null, null);
+            }
+        }
 
         // === Helper ===
-        private static Mat BitmapToMat(Bitmap bmp)
+        public static Mat BitmapToMat(Bitmap bmp)
         {
             using var ms = new MemoryStream();
             bmp.Save(ms, ImageFormat.Png);
             return Cv2.ImDecode(ms.ToArray(), ImreadModes.Color);
         }
 
-        private static Bitmap MatToBitmap(Mat mat)
+        public static Bitmap MatToBitmap(Mat mat)
         {
             Cv2.ImEncode(".png", mat, out var buf);
             using var ms = new MemoryStream(buf);
             using var tmp = new Bitmap(ms);
             return new Bitmap(tmp);
         }
+
+
     }
 }
