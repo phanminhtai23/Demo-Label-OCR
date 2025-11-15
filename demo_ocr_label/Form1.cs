@@ -129,6 +129,10 @@ namespace demo_ocr_label
         }
         private void Form1_Load(object sender, EventArgs e)
         {
+
+            // Chỗ lưu ảnh debug
+            ImageDebugSaver.ConfigureRoot("D:\\Project\\WinForm\\demo_ocr_label\\debug_imgs", disableDateSubFolder: false);
+
             LoadExcelData("data.xlsx");
             //until.LoadConfigFile("config.json");
 
@@ -329,10 +333,9 @@ namespace demo_ocr_label
 
             while (!ct.IsCancellationRequested)
             {
-                var detectLabelQrTime = Stopwatch.StartNew();
 
 
-                // Đo thời gian đọc frame đến khi hiển thị frame
+                // Đo toàn bộ thời gian xử lý 1 frame
                 var sw = Stopwatch.StartNew();
 
                 if (!_capture.Read(frame) || frame.Empty())
@@ -340,6 +343,9 @@ namespace demo_ocr_label
 
                 // Giữ bản copy frame gốc để hiển thị
                 var bmpFull = MatToBitmap(frame);
+
+                // DEBUG: Lưu ảnh full frame
+                if (debugMode) ImageDebugSaver.SaveStep0RawFrame(bmpFull);
 
                 // Lấy ROI (guide box) từ frame gốc
                 var roiResult = GetGuideBoxRoi(bmpFull, cameraBox.GuideBox, cameraBox);
@@ -352,9 +358,12 @@ namespace demo_ocr_label
                     cameraBox.BeginInvoke(new Action(() =>
                     {
                         var old = cameraBox.Image;
-                        cameraBox.Image = bmpFull;
+                        // CLONE để tránh GDI+ "Object is currently in use elsewhere"
+                        cameraBox.Image = (Bitmap)bmpFull.Clone();
                         old?.Dispose();
                     }));
+                    // Giải phóng bản gốc sau khi đã clone cho UI
+                    bmpFull.Dispose();
                     continue;
                 }
 
@@ -372,22 +381,54 @@ namespace demo_ocr_label
                     using var mat = frame.Clone();
 
                     currentThreshold = (int)numericThreshold.Value;
+
+
+
+                    // Đo thời gian detect QR
+                    var thoiGianTimQR = Stopwatch.StartNew();
+
                     // 1. Kiểm tra QR có trong Guild Box không?
                     var (qrPoints, qrText) = LabelDetector.DetectQRCode(roi);
+ 
 
-                    // 2. Nếu có QR, thì xác định tọa độ label trong ROI (Guild Box)
+
+                    if (showTime)
+                    {
+                        thoiGianTimQR.Stop();                       // dừng đếm
+                        double ms1 = thoiGianTimQR.Elapsed.TotalMilliseconds;
+                        Debug.WriteLine($"1. Thời gian tìm QR trong Guild Box: {ms1:F2} ms");
+                    }
+
+                    // Trong frame ảnh có mã QR
                     if (qrPoints != null)
                     {
+                        // DEBUG: lưu ảnh roi có QR
+                        if (debugMode) ImageDebugSaver.SaveStep1FindQr(roi, qrPoints, qrText);
+
+                        // Đo thời gian xác định tọa độ HCN quanh Label
+                        var thoiGianXacDinhToaDoLabel = Stopwatch.StartNew();
+
+                        // 2. Xác định tọa độ HCN quanh Label
                         var (rect, rectPoints, debugBmp1, rectInGuildlBox) = LabelDetector.DetectLabelRegionWithQrCode(roi, qrPoints);
 
-                        if (rectPoints != null && rectInGuildlBox) // HCN nằm trong Guild Box
-                        {
 
-                            // 2️⃣ Chuyển tọa độ box trong ROI -> tọa độ full ảnh
+
+                        if (showTime)
+                        {
+                            thoiGianXacDinhToaDoLabel.Stop();                       // dừng đếm
+                            double ms2 = thoiGianXacDinhToaDoLabel.Elapsed.TotalMilliseconds;
+                            Debug.WriteLine($"2. Thời gian xác định tọa độ HCN quanh Label: {ms2:F2} ms");
+                        }
+
+                        // Nếu HCN nằm trong Guild Box
+                        if (rectPoints != null && rectInGuildlBox) 
+                        {
+                            // DEBUG: Label nằm trong Guild Box
+                            if (debugMode) ImageDebugSaver.SaveStep2RectAroundLabel(debugBmp1);
+                            // Chuyển tọa độ box trong ROI -> tọa độ full ảnh
                             var qrBox = qrPoints.Select(p =>
                                 new OpenCvSharp.Point(p.X + mapped.X, p.Y + mapped.Y)
                             ).ToArray();
-
 
                             // chuyển tọa độ hình chữ nhật quanh Label -> tọa độ full ảnh
                             var qrRectangle = rectPoints.Select(p =>
@@ -402,35 +443,46 @@ namespace demo_ocr_label
 
                             var debugBmp = MatToBitmap(mat);
 
+
+                            // Hiển thị ảnh ra liền
                             cameraBox.BeginInvoke(new Action(() =>
                             {
                                 var old = cameraBox.Image;
-                                cameraBox.Image = debugBmp;
+                                cameraBox.Image = (Bitmap)debugBmp.Clone();
                                 old?.Dispose();
-                                //sw.Stop();                       // dừng đếm
-                                //double ms = sw.ElapsedMilliseconds;
-                                //double fps = (ms > 0) ? 1000.0 / ms : 0;
-                                ////Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
-                                ////Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
-                                //label6.Text = $"FPS: {fps:F1}";
 
                             }));
+
 
                             // DEBUG: show ảnh debug HCN trong Guild Box
                             //ShowBitmapCoDung(debugBmp1);
 
 
-                            var (aligned, qrBoxScale) = labelDetector.CropAndAlignLabel(roi, rect.Value, rectPoints, rectPoints, qrPoints);
+                            // Đo thời gian cắt và xoay thẳng Label
+                            var thoiGianCatXoayLabel = Stopwatch.StartNew();
 
-                            //CatXoayLabelTime.Stop();                       // dừng đếm
-                            //double ms2 = CatXoayLabelTime.ElapsedMilliseconds;
-                            //Debug.WriteLine($"Cắt, xoay Label Time: {ms2:F2} ms");
+                            // 3. Cắt và xoay thẳng Label
+                            var (alignedLabel, qrBoxScale) = labelDetector.CropAndAlignLabel(roi, rect.Value, rectPoints, rectPoints, qrPoints);
+                            if (debugMode) ImageDebugSaver.SaveStep3AlignedLabel(alignedLabel);
+
+                            if (showTime)
+                            {
+                                thoiGianCatXoayLabel.Stop();                       // dừng đếm
+                                double ms3 = thoiGianCatXoayLabel.Elapsed.TotalMilliseconds;
+                                Debug.WriteLine($"3. Thời gian cắt và xoay thẳng Label: {ms3:F2} ms");
+                            }
 
                             ////3 DEBUG: luôn hiển thị ảnh cắt label
-                            pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                            pictureBox1.Image = aligned;
+                            // Cập nhật UI phải qua Invoke và CLONE bitmap
+                            //pictureBox1.BeginInvoke(new Action(() =>
+                            //{
+                            //    pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
+                            //    var old = pictureBox1.Image;
+                            //    pictureBox1.Image = aligned != null ? (Bitmap)aligned.Clone() : null;
+                            //    old?.Dispose();
+                            //}));
 
-                            if (aligned != null)
+                            if (alignedLabel != null)
                             {
                                 //this.Invoke((Action)(() => ShowBitmap(aligned)));
                                 //var ocrTime = Stopwatch.StartNew();
@@ -438,49 +490,68 @@ namespace demo_ocr_label
 
                                 //ShowQrBox(aligned, qrBox);
 
-                                var (mergedCrop, ocrTexts, minScore, debugText) = RunOcrOnMergedBottomLeftAndAboveQr(ocr, aligned, qrBoxScale);
 
-                                //ocrTime.Stop(); // dừng đo
-                                //double ocrTimeMs = ocrTime.Elapsed.TotalMilliseconds;
-                                //Debug.WriteLine($"Extract Text Time: {ocrTimeMs:F2} ms");
+                                var thoiGianCatVaGop2Vung = Stopwatch.StartNew();
+                                //4. Cắt 2 vùng cần regconize
+                                var mergedCrop = CropComponent.CropAndMergeBottomLeftAndAboveQr(alignedLabel, qrBoxScale);
+
+                                if (debugMode) ImageDebugSaver.SaveStep4MergedCrop(mergedCrop);
+                                if (showTime)
+                                {
+                                    thoiGianCatVaGop2Vung.Stop();                       // dừng đếm
+                                    double ms4 = thoiGianCatVaGop2Vung.Elapsed.TotalMilliseconds;
+                                    Debug.WriteLine($"4. Thời gian cắt và gộp 2 vùng cần OCR: {ms4:F2} ms");
+                                }
+
+                                var thoiGianOCR = Stopwatch.StartNew();
+
+                                // 5. Gọi OCR trên mergedCrop
+                                var (ocrTexts, minScore, debugText) = ExtractTextsFromMergedCrop(ocr, mergedCrop);
+                                //if (debugMode) ImageDebugSaver.SaveStep5OcrInput(mergedCrop, minScore);
+
+                                if (showTime)
+                                {
+                                    thoiGianOCR.Stop();                       // dừng đếm
+                                    double ms5 = thoiGianOCR.Elapsed.TotalMilliseconds;
+                                    Debug.WriteLine($"5. Thời gian OCR trên mergedCrop: {ms5:F2} ms");
+                                }
+
+                                //var (mergedCrop, ocrTexts, minScore, debugText) = RunOcrOnMergedBottomLeftAndAboveQr(ocr, alignedLabel, qrBoxScale);
+
                                 var HauXuLy = Stopwatch.StartNew();
-                                //var (donHang, maAo, size, color) = HandleOcrTexts(ocrTexts, qrText);
-
-                                HauXuLy.Stop();                       // dừng đếm
-                                double ms6 = HauXuLy.Elapsed.TotalMilliseconds;
-                                Debug.WriteLine($"Hậu xử lý Time: {ms6:F2} ms");
+                                // 6. Hậu xử lý text trích được có nằm trong từ điển ? index đơn hàng trong label có khớp trong Qr?
+                                var (donHang, maAo, size, color) = HandleOcrTexts(ocrTexts, qrText);
+                               // DEBUG: hiển thị thời gian hậu xử lý
+                                if (showTime)
+                                {
+                                    HauXuLy.Stop();                       // dừng đếm
+                                    double ms6 = HauXuLy.Elapsed.TotalMilliseconds;
+                                    Debug.WriteLine($"6. Thời gian hậu xử lý text trích được: {ms6:F2} ms");
+                                }
 
 
                                 // extract được text và text hợp lệ
-                                //if (maAo != "" && size != "" && color != "")
-                                if (true)
+                                if (donHang != "" && maAo != "" && size != "" && color != "")
+                                //if (true)
                                 {
-
+                                    // DEBUG LƯU KẾT QUẢ
+                                    if (debugMode) ImageDebugSaver.SaveStep6PostProcessText(donHang, maAo, size, color);
                                     //// 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
                                     //Cv2.Rectangle(mat,
                                     //    new OpenCvSharp.Point(mapped.X, mapped.Y),
                                     //    new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
                                     //    Scalar.Blue, 2);
 
-                                    //// 2 Hiển thị frame kết quả
-                                    //var debugBmp = MatToBitmap(mat);
-                                    cameraBox.BeginInvoke(new Action(() =>
+                                    Bitmap aligned_clone = (Bitmap)alignedLabel.Clone();
+
+                                    // DEBUG: hiển thị ảnh cắt label
+                                    pictureBox1.BeginInvoke(new Action(() =>
                                     {
-                                        //var old = cameraBox.Image;
-                                        //cameraBox.Image = debugBmp;
-                                        //old?.Dispose();
-                                        sw.Stop();                       // dừng đếm
-                                        double ms = sw.ElapsedMilliseconds;
-                                        double fps = (ms > 0) ? 1000.0 / ms : 0;
-                                        //Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
-                                        Debug.WriteLine($"Total of full pipeline time extract sucessfully (detect-cắt Label, xoay180, OCR, hậu xử lý): {sw.ElapsedMilliseconds} ms");
-                                        label6.Text = $"FPS: {fps:F1}";
-
+                                        pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
+                                        var old = pictureBox1.Image;
+                                        pictureBox1.Image = aligned_clone;
+                                        old?.Dispose();
                                     }));
-
-                                    // 3 hiển thị ảnh debug label đã xoay và cắt
-                                    pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                                    pictureBox1.Image = aligned;
 
                                     cameraBox.BeginInvoke(new Action(() =>
                                     {
@@ -489,25 +560,27 @@ namespace demo_ocr_label
                                         label7.Text = $"Accuracy: {minScore * 100:F2}%";
                                         label7.Visible = true; // hiện accuracy
                                         label8.Visible = true; // hiện thông báo đã detect
+
+                                        sw.Stop();
+                                        double ms = sw.ElapsedMilliseconds;
+                                        double fps = (ms > 0) ? 1000.0 / ms : 0;
+                                        // DEBUG: show time
+                                        if (showTime) Debug.WriteLine($"TỔNG THỜI GIAN (FULL PIPELINE): {sw.ElapsedMilliseconds} ms");
+                                        label6.Text = $"FPS: {fps:F1}";
                                     }));
 
                                     // 4 hiển thị ảnh cắt 1/4
                                     if (mergedCrop != null)
                                     {
+                                        Bitmap mergedCrop_clone = (Bitmap)mergedCrop.Clone();
                                         pictureBox2.BeginInvoke(new Action(() =>
                                         {
                                             pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                                            pictureBox2.Image?.Dispose();
-                                            if (mergedCrop != null)
-                                            {
-                                                pictureBox2.BeginInvoke(new Action(() =>
-                                                {
-                                                    pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                                                    pictureBox2.Image?.Dispose();
-                                                    pictureBox2.Image = mergedCrop; // không cần clone nữa
-                                                }));
-                                            }
+                                            var old = pictureBox2.Image;
+                                            pictureBox2.Image = mergedCrop_clone;
+                                            old?.Dispose();
                                         }));
+                                        mergedCrop.Dispose();
                                     }
 
                                     //string combined = string.Join(" | ", ocrTexts.Select(tb => $"{tb.Text}: {tb.Score:F2}"));
@@ -519,21 +592,36 @@ namespace demo_ocr_label
                                         textBox1.AutoSize = false;
                                         textBox1.ScrollBars = ScrollBars.Vertical;
 
-                                        //textBox1.Text =
-                                        //    $"QR: \"{qrText}\"\r\n" +
-                                        //    $"Mã áo: \"{maAo}\"\r\n" +
-                                        //    $"Size áo: \"{size}\"\r\n" +
-                                        //    $"Màu áo: \"{color}\"";jj
+                                        textBox1.Text =
+                                        $"Đơn hàng: \"{donHang}\"\r\n" +
+                                            $"QR: \"{qrText}\"\r\n" +
+                                            $"Mã áo: \"{maAo}\"\r\n" +
+                                            $"Size áo: \"{size}\"\r\n" +
+                                            $"Màu áo: \"{color}\""; 
 
-                                        textBox1.Text = $"{qrText} | \r\n{debugText}";
+                                        //textBox1.Text = $"{qrText} | \r\n{debugText}";
                                     }));
                                     await Task.Delay(pauseTime * 1000); // dừng pauseTime giây trước khi detect tiếp
-                                                                        //MessageBox.Show("⏸️ Đang tạm dừng...\nNhấn OK để tiếp tục", "Tạm dừng test");
-
+                                    alignedLabel.Dispose();
                                 }
                                 else // text không đúng định dạng
                                 {
                                     Debug.WriteLine("text result k đúng định dạng");
+
+                                    Bitmap bitMap_clonee = (Bitmap)bmpFull.Clone();
+                                    cameraBox.BeginInvoke(new Action(() =>
+                                    {
+                                        var old = cameraBox.Image;
+                                        cameraBox.Image = bitMap_clonee;
+                                        old?.Dispose();
+                                        sw.Stop();                       // dừng đếm
+                                        double ms = sw.ElapsedMilliseconds;
+                                        double fps = (ms > 0) ? 1000.0 / ms : 0;
+                                        //Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
+                                        //Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
+                                        label6.Text = $"FPS: {fps:F1}";
+
+                                    }));
 
                                 }
                             }
@@ -573,20 +661,24 @@ namespace demo_ocr_label
                             //      (int)(rectPoints[0].Y + mapped.Y)),
                             //  4, Scalar.Red, -1);
                             var debugBmp = MatToBitmap(mat);
+                            Bitmap debugBmp_clone = (Bitmap)debugBmp.Clone();
+                            Debug.WriteLine("Thấy QR nhưng Label nằm ngoài Guild Box");
 
                             cameraBox.BeginInvoke(new Action(() =>
                             {
                                 var old = cameraBox.Image;
-                                cameraBox.Image = debugBmp;
+                                cameraBox.Image = debugBmp_clone;
                                 old?.Dispose();
-                                //sw.Stop();                       // dừng đếm
-                                //double ms = sw.ElapsedMilliseconds;
-                                //double fps = (ms > 0) ? 1000.0 / ms : 0;
-                                ////Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
-                                ////Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
-                                //label6.Text = $"FPS: {fps:F1}";
+                                sw.Stop();                       // dừng đếm
+                                double ms = sw.ElapsedMilliseconds;
+                                double fps = (ms > 0) ? 1000.0 / ms : 0;
+                                //Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
+                                //Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
+                                label6.Text = $"FPS: {fps:F1}";
 
                             }));
+                            debugBmp.Dispose();
+
                             //ShowBitmapCoDung(debugBmp1);
                         }
 
@@ -606,253 +698,23 @@ namespace demo_ocr_label
                         }));
                         Debug.WriteLine("Không phát hiện được QR trong Guild Box!");
                         // Hiển thị ảnh gốc
+
+                        Bitmap bitMat = MatToBitmap(mat);
                         cameraBox.BeginInvoke(new Action(() =>
                         {
                             var old = cameraBox.Image;
-                            cameraBox.Image = bmpFull;
+                            cameraBox.Image = bitMat;
                             old?.Dispose();
-                            //sw.Stop();                       // dừng đếm
-                            //double ms = sw.ElapsedMilliseconds;
-                            //double fps = (ms > 0) ? 1000.0 / ms : 0;
-                            ////Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
-                            ////Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
-                            //label6.Text = $"FPS: {fps:F1}";
+                            sw.Stop();                       // dừng đếm
+                            double ms = sw.ElapsedMilliseconds;
+                            double fps = (ms > 0) ? 1000.0 / ms : 0;
+                            //Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
+                            //Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
+                            label6.Text = $"FPS: {fps:F1}";
 
                         }));
 
                     }
-
-                    //var (rect, box, qrText, qrPoints180, qrPoints) = LabelDetector.DetectLabelRegion(roi);
-
-                    //using var mat = frame.Clone(); // frame gốc để vẽ overlay
-
-
-                    //detectLabelQrTime.Stop();                       // dừng đếm
-                    //double ms1 = detectLabelQrTime.ElapsedMilliseconds;
-                    //Debug.WriteLine($"Detect Label + QR time: {ms1:F2} ms");
-
-                    //// tìm thấy label
-                    //if (rect != null && box != null && qrText != null && qrPoints180 != null)
-                    //{
-                    //    Debug.WriteLine("Đã phát hiện label trong ROI!");
-                    //    var CatXoayLabelTime = Stopwatch.StartNew();
-
-                    //    // 2️⃣ Chuyển tọa độ box trong ROI -> tọa độ full ảnh
-                    //    var fullBox = box.Select(p =>
-                    //        new OpenCvSharp.Point(p.X + mapped.X, p.Y + mapped.Y)
-                    //    ).ToArray();
-
-                    //    // 3️⃣ Vẽ khung label và tâm trên frame full
-                    //    Cv2.Polylines(mat, new[] { fullBox }, true, Scalar.Lime, 2);
-                    //    //Cv2.Circle(mat,
-                    //    //    new OpenCvSharp.Point(
-                    //    //        (int)(rect.Value.Center.X + mapped.X),
-                    //    //        (int)(rect.Value.Center.Y + mapped.Y)),
-                    //    //    4, Scalar.Red, -1);
-
-                    //    Cv2.PutText(mat, $"Angle={rect.Value.Angle:F1}",
-                    //        new OpenCvSharp.Point(mapped.X, Math.Max(0, mapped.Y - 10)),
-                    //        HersheyFonts.HersheySimplex, 0.7, Scalar.Yellow, 2);
-
-                    //    // 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
-                    //    Cv2.Rectangle(mat,
-                    //        new OpenCvSharp.Point(mapped.X, mapped.Y),
-                    //        new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
-                    //        Scalar.Blue, 2);
-
-                    //    // 2 Hiển thị frame kết quả
-                    //    var debugBmp = MatToBitmap(mat);
-                    //    cameraBox.BeginInvoke(new Action(() =>
-                    //    {
-                    //        var old = cameraBox.Image;
-                    //        cameraBox.Image = debugBmp;
-                    //        old?.Dispose();
-                    //        //sw.Stop();                       // dừng đếm
-                    //        //double ms = sw.ElapsedMilliseconds;
-                    //        //double fps = (ms > 0) ? 1000.0 / ms : 0;
-                    //        ////Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
-                    //        ////Debug.WriteLine($"DetectLabelRegion time: {sw.ElapsedMilliseconds} ms");
-                    //        //label6.Text = $"FPS: {fps:F1}";
-
-                    //    }));
-
-                    //    var (aligned, qrBox) = labelDetector.CropAndAlignLabel(roi, rect.Value, box, qrPoints180, qrPoints);
-
-                    //    CatXoayLabelTime.Stop();                       // dừng đếm
-                    //    double ms2 = CatXoayLabelTime.ElapsedMilliseconds;
-                    //    Debug.WriteLine($"Cắt, xoay Label Time: {ms2:F2} ms");
-
-                    //    ////3 DEBUG: luôn hiển thị ảnh cắt label
-                    //    pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                    //    pictureBox1.Image = aligned;
-
-                    //    if (aligned != null)
-                    //    //if (false)
-                    //    {
-                    //        //this.Invoke((Action)(() => ShowBitmap(aligned)));
-                    //        //var ocrTime = Stopwatch.StartNew();
-                    //        // 1️⃣ Gọi OCR trên vùng dưới bên trái
-
-                    //        //ShowQrBox(aligned, qrBox);
-
-                    //        var (mergedCrop, ocrTexts, minScore, debugText) = RunOcrOnMergedBottomLeftAndAboveQr(ocr, aligned, qrBox);
-
-                    //        //ocrTime.Stop(); // dừng đo
-                    //        //double ocrTimeMs = ocrTime.Elapsed.TotalMilliseconds;
-                    //        //Debug.WriteLine($"Extract Text Time: {ocrTimeMs:F2} ms");
-                    //        var HauXuLy = Stopwatch.StartNew();
-                    //        var (maAo, size, color) = HandleOcrTexts(ocrTexts);
-
-                    //        HauXuLy.Stop();                       // dừng đếm
-                    //        double ms6 = HauXuLy.Elapsed.TotalMilliseconds;
-                    //        Debug.WriteLine($"Hậu xử lý Time: {ms6:F2} ms");
-
-
-                    //        // extract được text và text hợp lệ
-                    //        //if (maAo != "" && size != "" && color != "")
-                    //        if (true)
-                    //            {
-
-                    //            //// 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
-                    //            //Cv2.Rectangle(mat,
-                    //            //    new OpenCvSharp.Point(mapped.X, mapped.Y),
-                    //            //    new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
-                    //            //    Scalar.Blue, 2);
-
-                    //            //// 2 Hiển thị frame kết quả
-                    //            //var debugBmp = MatToBitmap(mat);
-                    //            cameraBox.BeginInvoke(new Action(() =>
-                    //            {
-                    //                //var old = cameraBox.Image;
-                    //                //cameraBox.Image = debugBmp;
-                    //                //old?.Dispose();
-                    //                sw.Stop();                       // dừng đếm
-                    //                double ms = sw.ElapsedMilliseconds;
-                    //                double fps = (ms > 0) ? 1000.0 / ms : 0;
-                    //                //Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
-                    //                Debug.WriteLine($"Total of full pipeline time extract sucessfully (detect-cắt Label, xoay180, OCR, hậu xử lý): {sw.ElapsedMilliseconds} ms");
-                    //                label6.Text = $"FPS: {fps:F1}";
-
-                    //            }));
-
-                    //            // 3 hiển thị ảnh debug label đã xoay và cắt
-                    //            pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                    //            pictureBox1.Image = aligned;
-
-                    //            cameraBox.BeginInvoke(new Action(() =>
-                    //            {
-                    //                cameraBox.IsObjectDetected = true;   // ✅ đổi sang khung xanh
-                    //                cameraBox.Invalidate();
-                    //                label7.Text = $"Accuracy: {minScore * 100:F2}%";
-                    //                label7.Visible = true; // hiện accuracy
-                    //                label8.Visible = true; // hiện thông báo đã detect
-                    //            }));
-
-                    //            // 4 hiển thị ảnh cắt 1/4
-                    //            if (mergedCrop != null)
-                    //            {
-                    //                pictureBox2.BeginInvoke(new Action(() =>
-                    //                {
-                    //                    pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                    //                    pictureBox2.Image?.Dispose();
-                    //                    if (mergedCrop != null)
-                    //                    {
-                    //                        pictureBox2.BeginInvoke(new Action(() =>
-                    //                        {
-                    //                            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                    //                            pictureBox2.Image?.Dispose();
-                    //                            pictureBox2.Image = mergedCrop; // không cần clone nữa
-                    //                        }));
-                    //                    }
-                    //                }));
-                    //            }
-
-                    //            //string combined = string.Join(" | ", ocrTexts.Select(tb => $"{tb.Text}: {tb.Score:F2}"));
-
-                    //            // 5 Hiển thị text lên textbox
-                    //            textBox1.BeginInvoke(new Action(() =>
-                    //            {
-                    //                textBox1.Multiline = true;
-                    //                textBox1.AutoSize = false;
-                    //                textBox1.ScrollBars = ScrollBars.Vertical;
-
-                    //                //textBox1.Text =
-                    //                //    $"QR: \"{qrText}\"\r\n" +
-                    //                //    $"Mã áo: \"{maAo}\"\r\n" +
-                    //                //    $"Size áo: \"{size}\"\r\n" +
-                    //                //    $"Màu áo: \"{color}\"";jj
-
-                    //                textBox1.Text = $"{qrText} | \r\n{debugText}";
-                    //            }));
-                    //            await Task.Delay(pauseTime * 1000); // dừng pauseTime giây trước khi detect tiếp
-                    //            //MessageBox.Show("⏸️ Đang tạm dừng...\nNhấn OK để tiếp tục", "Tạm dừng test");
-
-                    //        }
-                    //        else // text không đúng định dạng
-                    //        {
-                    //            Debug.WriteLine("text result k đúng định dạng");
-
-                    //        }
-                    //    }
-                    //}
-                    //else // không detec thấy label
-                    //{
-                    //    cameraBox.BeginInvoke(new Action(() =>
-                    //    {
-                    //        label7.Visible = false;
-                    //        label8.Visible = false;
-                    //        cameraBox.IsObjectDetected = false;  // 🔴 trở lại khung đỏ
-                    //        cameraBox.Invalidate();
-
-                    //    }));
-
-
-                    //    //// 1 (Tùy chọn) Vẽ khung ROI (để thấy vùng detect)
-                    //    //Cv2.Rectangle(mat,
-                    //    //    new OpenCvSharp.Point(mapped.X, mapped.Y),
-                    //    //    new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
-                    //    //    Scalar.Blue, 2);
-
-                    //    // 2 Hiển thị frame kết quả
-                    //    var debugBmp = MatToBitmap(mat);
-                    //    cameraBox.BeginInvoke(new Action(() =>
-                    //    {
-                    //        var old = cameraBox.Image;
-                    //        cameraBox.Image = debugBmp;
-                    //        old?.Dispose();
-                    //        sw.Stop();                       // dừng đếm
-                    //        double ms = sw.ElapsedMilliseconds;
-                    //        double fps = (ms > 0) ? 1000.0 / ms : 0;
-                    //        //Debug.WriteLine($"⏱ Time per frame: {ms:F1} ms  →  FPS: {fps:F1}");
-                    //        //Debug.WriteLine($"full pipeline không trích xuấ time: {sw.ElapsedMilliseconds} ms");
-                    //        label6.Text = $"FPS: {fps:F1}";
-
-                    //    }));
-
-
-                    //    // 3 hiển thị ảnh debug label đã xoay và cắt
-                    //    pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                    //    pictureBox1.Image = null;
-
-
-                    //    // 4 hiển thị ảnh cắt 1/4
-                    //    pictureBox2.BeginInvoke(new Action(() =>
-                    //    {
-                    //        pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                    //        pictureBox2.Image?.Dispose();
-                    //        pictureBox2.Image = null; // không cần clone nữa
-                    //    }));
-
-                    //    // 5 Hiển thị text lên textbox
-                    //    textBox1.BeginInvoke(new Action(() =>
-                    //    {
-                    //        textBox1.Multiline = true;
-                    //        textBox1.AutoSize = false;
-                    //        textBox1.ScrollBars = ScrollBars.Vertical;
-
-                    //        textBox1.Text = "";
-                    //    }));
-                    //}
                 }
                 catch (Exception ex)
                 {
@@ -861,6 +723,8 @@ namespace demo_ocr_label
 
                 // Free bitmap ROI tránh leak bộ nhớ
                 roi.Dispose();
+                // bmpFull đã được clone khi đưa vào UI → có thể giải phóng bản gốc ở đây
+                bmpFull.Dispose();
 
                 Thread.Sleep(1); // tránh CPU 100%
             }
@@ -1008,7 +872,7 @@ namespace demo_ocr_label
                     }
                 }
 
-                Debug.WriteLine($"[✅] Merged crop size: {mergedWidth}x{mergedHeight}");
+                //Debug.WriteLine($"[✅] Merged crop size: {mergedWidth}x{mergedHeight}");
 
                 // === 6️⃣ OCR ===
                 OCRResult result;
@@ -1048,10 +912,52 @@ namespace demo_ocr_label
             }
         }
 
-        // xử lý đầu ra của OCR
-        private (string donHang, string MaAo, string Size, string Other) HandleOcrTexts(List<string> ocrTexts, string qrText)
+
+        // Dùng ảnh ghép để OCR extract chữ
+        public (List<string> texts, float minScore, string DebugText) ExtractTextsFromMergedCrop(PaddleOCREngine ocr, Bitmap mergedCrop)
         {
-            if (ocrTexts == null || ocrTexts.Count < 3)
+            var texts = new List<string>();
+            string DebugText = "";
+            float minScore = 999;
+
+            try
+            {
+                if (ocr == null || mergedCrop == null)
+                    return (texts, -999, "[❌] Input null");
+
+                OCRResult result;
+                lock (ocr)
+                {
+                    result = ocr.DetectText(mergedCrop);
+                }
+
+                if (result?.TextBlocks?.Count > 0)
+                {
+                    texts = result.TextBlocks
+                        .Where(tb => !string.IsNullOrWhiteSpace(tb.Text))
+                        .Select(tb => tb.Text.Trim())
+                        .ToList();
+
+                    foreach (var tb in result.TextBlocks)
+                    {
+                        if (tb.Score < minScore)
+                            minScore = tb.Score;
+                        DebugText += $"{tb.Text?.Trim()} | Score: {tb.Score * 100:F2}%\r\n";
+                    }
+                }
+
+                return (texts, minScore, DebugText);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[❌ OCR ONLY ERROR] {ex.Message}");
+                return (texts, -999, DebugText);
+            }
+        }
+        // xử lý đầu ra của OCR
+        private (string donHang, string maAo, string size, string color) HandleOcrTexts(List<string> ocrTexts, string qrText)
+        {
+            if (ocrTexts == null || ocrTexts.Count < 4)
             {
                 Debug.WriteLine($"[HandleOcrTexts] Warning: OCR texts count is lower than 3, ocrTexts.Count = {ocrTexts.Count}");
                 return ("", "", "", "");
@@ -1095,35 +1001,56 @@ namespace demo_ocr_label
             //var t_lower = t.ToLower();
             //Debug.WriteLine($"trước Trim {text}, sau Trim: {t_lower}");
 
-            if (string.IsNullOrEmpty(donHang) &&
-                ocrTexts[0].Contains('/'))
+            //Debug.WriteLine("=== OCR Texts after Trim ===");
+            //for (int i = 0; i < ocrTexts.Count(); i++)
+            //{
+            //    Debug.WriteLine($"{ocrTexts[i]}");
+            //}
+
+
+            // Hậu xử lý text chỗ đơn hàng, số lượng ký tự phải bằng 3.
+            if (string.IsNullOrEmpty(maAo) &&
+                ocrTexts[0].Length == 3)
             {
-                var donHang_split = ocrTexts[0].Trim().Split('/');
 
-                if (donHang_split.Length == 2)
+                char idDonHang = ocrTexts[0][0];
+                char tongSoDonHang = ocrTexts[0][ocrTexts[0].Length - 1];
+
+                string[] qrTextSplit = qrText.Split('-');
+                //Debug.WriteLine($"qrTextSplit last: {qrTextSplit}");
+                //Debug.WriteLine($"idDonHang: {idDonHang}");
+                //Debug.WriteLine($"ocrTexts[0]: {ocrTexts[0]}");
+
+
+
+                // trường hợp có / ở cuối qrText
+                if (qrTextSplit[qrTextSplit.Length - 1].Contains('/'))
                 {
-                    string idDonHang = donHang_split[0].Trim();
-                    string tongSoDonHang = donHang_split[1].Trim();
 
-                    string[] qrTextSplit = qrText.Split('-');
-
-                    // trường hợp có / ở cuối qrText
-                    if (qrTextSplit[-1].Contains('/'))
+                    string stringLastQRText = qrTextSplit[qrTextSplit.Length - 1]; // ví dụ "1/5"
+                    char qrTextSplit_last = stringLastQRText[0]; // Lấy 5
+                    if (qrTextSplit_last != idDonHang)
                     {
-                        string[] qrTextSplit_last = qrTextSplit[-1].Split('/');
-                        Debug.WriteLine($"qrTextSplit_last[0]: {qrTextSplit_last[0]}, idDonHang: {idDonHang}");
-                        if (qrTextSplit_last[0] != idDonHang)
-                        {
-                            Debug.WriteLine($"qrTextSplit_last[0] != idDonHang, qrTextSplit_last[0]: {qrTextSplit_last[0]}, idDonHang: {idDonHang}");
-                        }
+                        Debug.WriteLine("=== QR Text có / ===");
+                        Debug.WriteLine($"Chỉ số đơn hàng trong QR != Chỉ số đơn hàng trên Label - {qrTextSplit_last} != {idDonHang}");
+                        return (donHang, maAo, size, color);
+                    } else
+                    {
+                        donHang = idDonHang.ToString() + "/" + tongSoDonHang;
                     }
-                    else
+                }
+                else // trường hợp KHÔNG có / ở cuối qrText
+                {
+                    string stringLastQRText = qrTextSplit[qrTextSplit.Length - 1]; // ví dụ "1/5"
+                    char qrTextSplit_last = stringLastQRText[stringLastQRText.Length - 1]; // Lấy 5
+                    if (qrTextSplit_last != idDonHang)
                     {
-                        string qrTextSplit_last = qrTextSplit[-1];
-                        if (qrTextSplit_last != idDonHang)
-                        {
-                            Debug.WriteLine($"qrTextSplit_last != idDonHang, qrTextSplit_last: {qrTextSplit_last}, idDonHang: {idDonHang}");
-                        }
+                        Debug.WriteLine("=== QR Text không có / ===");
+                        Debug.WriteLine($"Chỉ số đơn hàng trong QR !=  Chỉ số đơn hàng trên Label - {qrTextSplit_last} != {idDonHang}");
+                        return (donHang, maAo, size, color);
+                    }else
+                    {
+                        donHang = idDonHang.ToString() + "/" + tongSoDonHang;
                     }
                 }
 
@@ -1141,7 +1068,7 @@ namespace demo_ocr_label
                     size = ocrTexts[2].Trim();
                 }
 
-                //  > 3️⃣ Còn lại gom vào "other"
+                //  > 4 chữ
                 if (ocrTexts.Count() > 4)
                 {
                     var color_trim = "";
@@ -1156,21 +1083,20 @@ namespace demo_ocr_label
                     }
 
                 }
-                else // =3
+                else // = 4
                 {
                     if (string.IsNullOrEmpty(color) &&
-                          colors.Contains(ocrTexts[2].Trim().ToLower()))
+                          colors.Contains(ocrTexts[3].Trim().ToLower()))
                     {
-                        color = ocrTexts[2].Trim();
+                        color = ocrTexts[3].Trim();
                     }
                 }
 
+                //Debug.WriteLine($"Đơn hàng: {donHang}, Mã áo: {maAo}, size {size}, color: {color}");
                 return (donHang, maAo, size, color);
             }
             return (donHang, maAo, size, color);
         }
-
-
 
 
 
@@ -1180,6 +1106,7 @@ namespace demo_ocr_label
             base.OnFormClosing(e);
         }
 
+        // Replace your current MatToBitmap with this safe version
         private Bitmap MatToBitmap(Mat mat)
         {
             int w = mat.Width;

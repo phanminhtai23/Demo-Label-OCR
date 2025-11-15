@@ -4,6 +4,8 @@ demo_ocr_label/native/
 demo_ocr_label.sln
 note.txt
 debug_imgs/
+*.docx
+demo_ocr_label/obj/Debug/
 
 # Visual Studio
 .vs/

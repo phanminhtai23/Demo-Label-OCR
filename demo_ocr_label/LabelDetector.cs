@@ -49,7 +49,7 @@ namespace demo_ocr_label
                 //}
                 // Hiển thị hoặc lưu file
                 // pictureBox.Image = debugBmp;
-                Debug.WriteLine("Vẽ hình chữ nhật bao quanh QR code");
+                //Debug.WriteLine("Vẽ hình chữ nhật bao quanh QR code");
                 //debugBmp.Save("D:\Project\WinForm\demo_ocr_label\debug_imgs\veHCN.jpg");
 
                 // Kiểm tra xem 4 đỉnh có nằm trong ROI box không
@@ -231,7 +231,7 @@ namespace demo_ocr_label
                 while (deltaAngle > 180) deltaAngle -= 360;
                 bool needs180Flip = Math.Abs(deltaAngle) > 90;
 
-                Debug.WriteLine($"🧭 Label={labelAngle:F1}°, QR={qrAngle:F1}°, Δ={deltaAngle:F1}° → Flip180={needs180Flip}");
+                //Debug.WriteLine($"🧭 Label={labelAngle:F1}°, QR={qrAngle:F1}°, Δ={deltaAngle:F1}° → Flip180={needs180Flip}");
 
                 // 🔹 5) Ma trận xoay quanh tâm label
                 Mat rotationMatrix = Cv2.GetRotationMatrix2D(rect.Center, labelAngle, 1.0);
@@ -290,7 +290,7 @@ namespace demo_ocr_label
                         rotatedQRPoints[i].X = labelWidth - rotatedQRPoints[i].X;
                         rotatedQRPoints[i].Y = labelHeight - rotatedQRPoints[i].Y;
                     }
-                    Debug.WriteLine("🔄 Đã xoay lại 180° (dựa trên QR geometry).");
+                    //Debug.WriteLine("🔄 Đã xoay lại 180° (dựa trên QR geometry).");
                 }
 
                 // 🔹 10) Ảnh phải có 3 kênh
@@ -298,9 +298,9 @@ namespace demo_ocr_label
                     Cv2.CvtColor(cropped, cropped, ColorConversionCodes.GRAY2BGR);
 
                 // 🔹 11) Debug log
-                Debug.WriteLine($"Cropped size: {cropped.Width}x{cropped.Height}");
-                for (int i = 0; i < rotatedQRPoints.Length; i++)
-                    Debug.WriteLine($"   ⮑ QR[{i}] after transform: ({rotatedQRPoints[i].X:F1}, {rotatedQRPoints[i].Y:F1})");
+                //Debug.WriteLine($"Cropped size: {cropped.Width}x{cropped.Height}");
+                //for (int i = 0; i < rotatedQRPoints.Length; i++)
+                //    Debug.WriteLine($"   ⮑ QR[{i}] after transform: ({rotatedQRPoints[i].X:F1}, {rotatedQRPoints[i].Y:F1})");
 
                 // 🔹 12) Vẽ QR box
                 OpenCvSharp.Point[] qrBox = rotatedQRPoints
@@ -316,8 +316,8 @@ namespace demo_ocr_label
                 //}
 
                 //Cv2.Polylines(cropped, new[] { qrBox }, true, new Scalar(0, 0, 255), 2);
-                for (int i = 0; i < qrBox.Length; i++)
-                   Cv2.Circle(cropped, qrBox[i], 4, new Scalar(0, 255, 0), -1);
+                //for (int i = 0; i < qrBox.Length; i++)
+                //   Cv2.Circle(cropped, qrBox[i], 4, new Scalar(0, 255, 0), -1);
 
                 Bitmap BitMapCropped = MatToBitmap(cropped);
 

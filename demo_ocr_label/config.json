@@ -27,8 +27,8 @@
     "right": 1.4
   },
   "systemArivable": {
-    "debugMode": true,
-    "showTime": false
+    "debugMode": false,
+    "showTime": true
 
   }
 }
