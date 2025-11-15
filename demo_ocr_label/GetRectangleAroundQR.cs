@@ -73,16 +73,16 @@ namespace demo_ocr_label
             Point2f unitV = lenV > 0 ? new Point2f(vecVertical.X / lenV, vecVertical.Y / lenV) : new Point2f(0, 1);
 
             // R0: Từ Q0, đi lên (ngược hướng Q0->Q3) 1qr, rồi dịch sang trái 2.5qr
-            Point2f R0 = qrPoints[0] - unitV * (1.2f * qrSideLength) - unitH * (3.8f * qrSideLength);
+            Point2f R0 = qrPoints[0] - unitV * (utils.fileConfig.labelRectangle.up * qrSideLength) - unitH * (utils.fileConfig.labelRectangle.left * qrSideLength);
 
             // R1: Từ Q0, đi lên (ngược hướng Q0->Q3) 1qr, rồi dịch sang phải 0.5qr
-            Point2f R1 = qrPoints[0] - unitV * (1.2f * qrSideLength) + unitH * (1.4f * qrSideLength);
+            Point2f R1 = qrPoints[0] - unitV * (utils.fileConfig.labelRectangle.up * qrSideLength) + unitH * (utils.fileConfig.labelRectangle.right * qrSideLength);
 
             // R2: Từ Q0, đi xuống (cùng hướng Q0->Q3) 2qr, rồi dịch sang phải 1qr
-            Point2f R2 = qrPoints[0] + unitV * (2.4f * qrSideLength) + unitH * (1.4f * qrSideLength);
+            Point2f R2 = qrPoints[0] + unitV * (utils.fileConfig.labelRectangle.down * qrSideLength) + unitH * (utils.fileConfig.labelRectangle.right * qrSideLength);
 
             // R3: Từ R0, đi xuống 2qr, rồi dịch sang trái 2.5qr    
-            Point2f R3 = qrPoints[0] + unitV * (2.4f * qrSideLength) - unitH * (3.8f * qrSideLength);
+            Point2f R3 = qrPoints[0] + unitV * (utils.fileConfig.labelRectangle.down * qrSideLength) - unitH * (utils.fileConfig.labelRectangle.left * qrSideLength);
 
             Point2f[] rectPoints = new Point2f[4];
             rectPoints[0] = R0;

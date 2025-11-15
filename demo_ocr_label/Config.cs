@@ -8,6 +8,7 @@ namespace demo_ocr_label
 {
     public class Config
     {
+
         // vùng chứa chứa 3 thông tin: mã áo, size áo và màu áo
         public Component bottomLeftComponent { get; set; }
         // vùng chứa thông tin số lượng đơn hàng và thứ tự đơn hàng
@@ -15,12 +16,12 @@ namespace demo_ocr_label
         // các tham số của mô hình PadlleOCR
         public PaddleOCRParams modelParams { get; set; }
 
-        public systemArivables systemArivables { get; set; }
+        public SystemArivables systemArivable { get; set; }
 
-        public labelRectangle labelRectangle { get; set; }
+        public LabelRectangle labelRectangle { get; set; }
     }
 
-
+        
     // mô tả một vùng cắt thông tin số lượng đơn hàng - nằm phía trên qr code. Độ lớn tính tương đối % so sánh với độ dài cạnh của qr code
     public class Component
     {
@@ -64,13 +65,13 @@ namespace demo_ocr_label
         public bool det_db_score_mode { get; set; } = false; 
 
     }
-    public class systemArivables
+    public class SystemArivables
     {
         public bool debugMode { get; set; } = true;
         public bool showTime { get; set; } = false;
     }
 
-    public class labelRectangle
+    public class LabelRectangle
     {
         public float up { get; set; }
         public float down { get; set; }

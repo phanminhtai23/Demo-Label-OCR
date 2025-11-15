@@ -1,7 +1,7 @@
 {
   "bottomLeftComponent": {
     "width": 0.7,
-    "height": 0.35
+    "height": 0.5
   },
   "aboveQrComponent": {
     "doiTamSangPhai": 0.2,
@@ -21,13 +21,14 @@
     "det_db_score_mode": true
   },
   "labelRectangle": {
-    "up": 1,
-    "down": 2.5,
+    "up": 1.2,
+    "down": 2.2,
     "left": 3.8,
-    "right": 1.5
+    "right": 1.4
   },
-  "systemArivables": {
+  "systemArivable": {
     "debugMode": true,
     "showTime": false
+
   }
 }

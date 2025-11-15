@@ -56,8 +56,6 @@ namespace demo_ocr_label
         private int pauseTime = 0; // seconds
         private bool debugMode = false;
         private bool showTime = false;
-
-        public Config? fileConfig = null;
         public Form1()
         {
             InitializeComponent();
@@ -131,20 +129,19 @@ namespace demo_ocr_label
         }
         private void Form1_Load(object sender, EventArgs e)
         {
-
             LoadExcelData("data.xlsx");
-            fileConfig = LoadConfigFile("config.json");
+            //until.LoadConfigFile("config.json");
 
-            if (fileConfig != null)
+            if (utils.fileConfig != null)
             {
-                string json = JsonSerializer.Serialize(fileConfig, new JsonSerializerOptions
+                string json = JsonSerializer.Serialize(utils.fileConfig, new JsonSerializerOptions
                 {
                     WriteIndented = true // in gọn 1 dòng
                 });
                 Debug.WriteLine($"[CONFIG] {json}");
             }
-            debugMode = fileConfig.systemArivables.debugMode;
-            showTime = fileConfig.systemArivables.showTime;
+            debugMode = utils.fileConfig.systemArivable.debugMode;
+            showTime = utils.fileConfig.systemArivable.showTime;
 
 
             LoadCameraList();
@@ -261,34 +258,7 @@ namespace demo_ocr_label
             }
         }
 
-        private Config? LoadConfigFile(string configFileName)
-        {
-            string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, configFileName);
-            Debug.WriteLine("Đường dẫn config file: " + filePath);
-
-            if (!File.Exists(filePath))
-            {
-                ShowWarningBox("Không tìm thấy file config! \rVui lòng đặt file config tên \"config.json\" nằm cùng thư mục ứng dụng!");
-                return null;
-            }
-
-            try
-            {
-                string jsonString = File.ReadAllText(filePath);
-                var config = JsonSerializer.Deserialize<Config>(jsonString);
-
-                if (config == null)
-                    throw new Exception("Không thể đọc file JSON (null config).");
-
-                Debug.WriteLine("Đọc dữ liệu thành công từ file config!");
-                return config;
-            }
-            catch (Exception ex)
-            {
-                ShowWarningBox("Lỗi khi đọc file config:\n" + ex.Message);
-                return null;
-            }
-        }
+        
 
 
         // Hộp cảnh báo có 2 lựa chọn: Tải lại / Đóng
@@ -450,7 +420,7 @@ namespace demo_ocr_label
                             //ShowBitmapCoDung(debugBmp1);
 
 
-                            var (aligned, qrBox111) = labelDetector.CropAndAlignLabel(roi, rect.Value, rectPoints, rectPoints, qrPoints);
+                            var (aligned, qrBoxScale) = labelDetector.CropAndAlignLabel(roi, rect.Value, rectPoints, rectPoints, qrPoints);
 
                             //CatXoayLabelTime.Stop();                       // dừng đếm
                             //double ms2 = CatXoayLabelTime.ElapsedMilliseconds;
@@ -468,13 +438,13 @@ namespace demo_ocr_label
 
                                 //ShowQrBox(aligned, qrBox);
 
-                                var (mergedCrop, ocrTexts, minScore, debugText) = RunOcrOnMergedBottomLeftAndAboveQr(ocr, aligned, qrBox);
+                                var (mergedCrop, ocrTexts, minScore, debugText) = RunOcrOnMergedBottomLeftAndAboveQr(ocr, aligned, qrBoxScale);
 
                                 //ocrTime.Stop(); // dừng đo
                                 //double ocrTimeMs = ocrTime.Elapsed.TotalMilliseconds;
                                 //Debug.WriteLine($"Extract Text Time: {ocrTimeMs:F2} ms");
                                 var HauXuLy = Stopwatch.StartNew();
-                                var (maAo, size, color) = HandleOcrTexts(ocrTexts);
+                                //var (donHang, maAo, size, color) = HandleOcrTexts(ocrTexts, qrText);
 
                                 HauXuLy.Stop();                       // dừng đếm
                                 double ms6 = HauXuLy.Elapsed.TotalMilliseconds;
@@ -625,7 +595,6 @@ namespace demo_ocr_label
                     }
                     else // không thấy qr: hiển thị frame bình thường
                     {
-
 
                         cameraBox.BeginInvoke(new Action(() =>
                         {
@@ -937,9 +906,9 @@ namespace demo_ocr_label
                 // === 3️⃣ Vùng góc dưới bên trái ===
                 Rectangle roiBottomLeft = new Rectangle(
                     0,
-                    (int)(height * (1 - fileConfig.bottomLeftComponent.height)),
-                    (int)(width * fileConfig.bottomLeftComponent.width),
-                    (int)(height * fileConfig.bottomLeftComponent.height)
+                    (int)(height * (1 - utils.fileConfig.bottomLeftComponent.height)),
+                    (int)(width * utils.fileConfig.bottomLeftComponent.width),
+                    (int)(height * utils.fileConfig.bottomLeftComponent.height)
                 );
                 roiBottomLeft.Intersect(new Rectangle(0, 0, width, height));
                 if (roiBottomLeft.Width <= 0 || roiBottomLeft.Height <= 0)
@@ -969,15 +938,15 @@ namespace demo_ocr_label
                 normal.Y /= len;
 
                 // Các thông số vùng cắt
-                float offset = (float)(fileConfig.aboveQrComponent.doiTamLenTren * qrWidth);  // khoảng cách lên trên
-                float widthAbove = (float)(fileConfig.aboveQrComponent.width * qrWidth);   // rộng sang trái
-                float heightAbove = (float)(fileConfig.aboveQrComponent.height * qrHeight); // dài lên trên
+                float offset = (float)(utils.fileConfig.aboveQrComponent.doiTamLenTren * qrWidth);  // khoảng cách lên trên
+                float widthAbove = (float)(utils.fileConfig.aboveQrComponent.width * qrWidth);   // rộng sang trái
+                float heightAbove = (float)(utils.fileConfig.aboveQrComponent.height * qrHeight); // dài lên trên
 
                 // Vector đơn vị theo hướng cạnh trên (trái → phải)
                 var dir = new OpenCvSharp.Point2f(topVec.X / qrWidth, topVec.Y / qrWidth);
 
                 // dời sang phải
-                float shiftDist = fileConfig.aboveQrComponent.doiTamSangPhai * qrWidth;
+                float shiftDist = utils.fileConfig.aboveQrComponent.doiTamSangPhai * qrWidth;
 
 
                 // Gốc bắt đầu từ góc phải trên QR (p1)
@@ -1080,14 +1049,15 @@ namespace demo_ocr_label
         }
 
         // xử lý đầu ra của OCR
-        private (string MaAo, string Size, string Other) HandleOcrTexts(List<string> ocrTexts)
+        private (string donHang, string MaAo, string Size, string Other) HandleOcrTexts(List<string> ocrTexts, string qrText)
         {
             if (ocrTexts == null || ocrTexts.Count < 3)
             {
                 Debug.WriteLine($"[HandleOcrTexts] Warning: OCR texts count is lower than 3, ocrTexts.Count = {ocrTexts.Count}");
-                return ("", "", "");
+                return ("", "", "", "");
             }
 
+            string donHang = "";
             string maAo = "";
             string size = "";
             string color = "";
@@ -1125,46 +1095,83 @@ namespace demo_ocr_label
             //var t_lower = t.ToLower();
             //Debug.WriteLine($"trước Trim {text}, sau Trim: {t_lower}");
 
-            // 1️⃣ Kiểm tra mã áo (thường là số hoặc có chữ ngắn, như 3000, 500A, A12)
-            if (string.IsNullOrEmpty(maAo) &&
-                models.Contains(ocrTexts[0].Trim().ToLower()))
+            if (string.IsNullOrEmpty(donHang) &&
+                ocrTexts[0].Contains('/'))
             {
-                maAo = ocrTexts[0].Trim();
-            }
+                var donHang_split = ocrTexts[0].Trim().Split('/');
 
-            // 2️⃣ Kiểm tra size
-            if (string.IsNullOrEmpty(size) &&
-                sizes.Contains(ocrTexts[1].Trim().ToLower()))
-            {
-                size = ocrTexts[1].Trim();
-            }
-
-            //  > 3️⃣ Còn lại gom vào "other"
-            if (ocrTexts.Count() > 3)
-            {
-                var color_trim = "";
-                for (int i = 2; i < ocrTexts.Count(); i++)
+                if (donHang_split.Length == 2)
                 {
-                    color_trim += ocrTexts[i].Trim();
-                }
-                if (string.IsNullOrEmpty(color) &&
-                    colors.Contains(color_trim.ToLower()))
-                {
-                    color = color_trim;
+                    string idDonHang = donHang_split[0].Trim();
+                    string tongSoDonHang = donHang_split[1].Trim();
+
+                    string[] qrTextSplit = qrText.Split('-');
+
+                    // trường hợp có / ở cuối qrText
+                    if (qrTextSplit[-1].Contains('/'))
+                    {
+                        string[] qrTextSplit_last = qrTextSplit[-1].Split('/');
+                        Debug.WriteLine($"qrTextSplit_last[0]: {qrTextSplit_last[0]}, idDonHang: {idDonHang}");
+                        if (qrTextSplit_last[0] != idDonHang)
+                        {
+                            Debug.WriteLine($"qrTextSplit_last[0] != idDonHang, qrTextSplit_last[0]: {qrTextSplit_last[0]}, idDonHang: {idDonHang}");
+                        }
+                    }
+                    else
+                    {
+                        string qrTextSplit_last = qrTextSplit[-1];
+                        if (qrTextSplit_last != idDonHang)
+                        {
+                            Debug.WriteLine($"qrTextSplit_last != idDonHang, qrTextSplit_last: {qrTextSplit_last}, idDonHang: {idDonHang}");
+                        }
+                    }
                 }
 
-            }
-            else // =3
-            {
-                if (string.IsNullOrEmpty(color) &&
-                      colors.Contains(ocrTexts[2].Trim().ToLower()))
+                // 1️⃣ Kiểm tra mã áo (thường là số hoặc có chữ ngắn, như 3000, 500A, A12)
+                if (string.IsNullOrEmpty(maAo) &&
+                    models.Contains(ocrTexts[1].Trim().ToLower()))
                 {
-                    color = ocrTexts[2].Trim();
+                    maAo = ocrTexts[1].Trim();
                 }
-            }
 
-                return (maAo, size, color);
+                // 2️⃣ Kiểm tra size
+                if (string.IsNullOrEmpty(size) &&
+                    sizes.Contains(ocrTexts[2].Trim().ToLower()))
+                {
+                    size = ocrTexts[2].Trim();
+                }
+
+                //  > 3️⃣ Còn lại gom vào "other"
+                if (ocrTexts.Count() > 4)
+                {
+                    var color_trim = "";
+                    for (int i = 3; i < ocrTexts.Count(); i++)
+                    {
+                        color_trim += ocrTexts[i].Trim();
+                    }
+                    if (string.IsNullOrEmpty(color) &&
+                        colors.Contains(color_trim.ToLower()))
+                    {
+                        color = color_trim;
+                    }
+
+                }
+                else // =3
+                {
+                    if (string.IsNullOrEmpty(color) &&
+                          colors.Contains(ocrTexts[2].Trim().ToLower()))
+                    {
+                        color = ocrTexts[2].Trim();
+                    }
+                }
+
+                return (donHang, maAo, size, color);
+            }
+            return (donHang, maAo, size, color);
         }
+
+
+
 
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -1229,16 +1236,16 @@ namespace demo_ocr_label
             OCRParameter param = new OCRParameter
             {
 
-                det = fileConfig.modelParams.det,
-                cls = fileConfig.modelParams.cls,
-                use_angle_cls = fileConfig.modelParams.use_angle_cls,
-                rec = fileConfig.modelParams.rec,
-                det_db_thresh = fileConfig.modelParams.det_db_thresh,
-                det_db_box_thresh = fileConfig.modelParams.det_db_box_thresh,
-                cls_thresh = fileConfig.modelParams.cls_thresh,
-                enable_mkldnn = fileConfig.modelParams.enable_mkldnn,
-                cpu_math_library_num_threads = fileConfig.modelParams.cpu_math_library_num_threads,
-                det_db_score_mode = fileConfig.modelParams.det_db_score_mode
+                det = utils.fileConfig.modelParams.det,
+                cls = utils.fileConfig.modelParams.cls,
+                use_angle_cls = utils.fileConfig.modelParams.use_angle_cls,
+                rec = utils.fileConfig.modelParams.rec,
+                det_db_thresh = utils.fileConfig.modelParams.det_db_thresh,
+                det_db_box_thresh = utils.fileConfig.modelParams.det_db_box_thresh,
+                cls_thresh = utils.fileConfig.modelParams.cls_thresh,
+                enable_mkldnn = utils.fileConfig.modelParams.enable_mkldnn,
+                cpu_math_library_num_threads = utils.fileConfig.modelParams.cpu_math_library_num_threads,
+                det_db_score_mode = utils.fileConfig.modelParams.det_db_score_mode
             };
             ocr = new PaddleOCREngine(config, param);
         }
