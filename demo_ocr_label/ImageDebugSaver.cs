@@ -1,9 +1,10 @@
-﻿using System;
+﻿using OpenCvSharp; // để dùng Point2f
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using OpenCvSharp; // để dùng Point2f
+using System.Text.Json;
 
 namespace demo_ocr_label
 {
@@ -255,6 +256,44 @@ namespace demo_ocr_label
             catch (Exception ex)
             {
                 Debug.WriteLine($"[SaveStep6PostProcessText ERROR] {ex.Message}");
+                return null;
+            }
+        }
+
+        // ... bên trong namespace demo_ocr_label, class ImageDebugSaver
+
+        public static string? SaveResultJson(double runMilliseconds, string donHang, string qrText, string maAo, string size, string color)
+        {
+            try
+            {
+                if (!Enabled) return null;
+
+                // Nếu truyền rỗng -> dùng cấu hình sẵn của ImageDebugSaver (RootDirectory + tùy DateSubFolder)
+                string directory = "D:\\Project\\WinForm\\demo_ocr_label\\debug_jsons";
+
+                // Tên file theo giờ_phút_giây_ngày_tháng_năm
+                string fileName = $"{DateTime.Now:HHmmss_ddMMyyyy}.json";
+                string fullPath = Path.Combine(directory, fileName);
+
+                var payload = new
+                {
+                    timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                    runMs = runMilliseconds,
+                    donHang,
+                    qrText,
+                    maAo,
+                    size,
+                    color
+                };
+
+                var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(fullPath, json);
+                Debug.WriteLine($"[ImageDebugSaver] Saved JSON: {fullPath}");
+                return fullPath;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ImageDebugSaver ERROR SaveResultJson] {ex.Message}");
                 return null;
             }
         }

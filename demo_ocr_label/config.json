@@ -28,7 +28,7 @@
   },
   "systemArivable": {
     "debugMode": false,
-    "showTime": true
-
+    "showTime": true,
+    "saveJsonResult": false
   }
 }

@@ -567,6 +567,19 @@ namespace demo_ocr_label
                                         // DEBUG: show time
                                         if (showTime) Debug.WriteLine($"TỔNG THỜI GIAN (FULL PIPELINE): {sw.ElapsedMilliseconds} ms");
                                         label6.Text = $"FPS: {fps:F1}";
+
+                                        // DEBUG: Lưu json result
+                                        if (utils.fileConfig.systemArivable.saveJsonResult)
+                                        {
+                                            ImageDebugSaver.SaveResultJson(
+                                                    runMilliseconds: ms,
+                                                    donHang: donHang,
+                                                    qrText: qrText,
+                                                    maAo: maAo,
+                                                    size: size,
+                                                    color: color
+                                                );
+                                        }
                                     }));
 
                                     // 4 hiển thị ảnh cắt 1/4
@@ -593,11 +606,13 @@ namespace demo_ocr_label
                                         textBox1.ScrollBars = ScrollBars.Vertical;
 
                                         textBox1.Text =
-                                        $"Đơn hàng: \"{donHang}\"\r\n" +
+                                            $"Đơn hàng: \"{donHang}\"\r\n" +
                                             $"QR: \"{qrText}\"\r\n" +
                                             $"Mã áo: \"{maAo}\"\r\n" +
                                             $"Size áo: \"{size}\"\r\n" +
                                             $"Màu áo: \"{color}\""; 
+
+
 
                                         //textBox1.Text = $"{qrText} | \r\n{debugText}";
                                     }));
@@ -726,7 +741,7 @@ namespace demo_ocr_label
                 // bmpFull đã được clone khi đưa vào UI → có thể giải phóng bản gốc ở đây
                 bmpFull.Dispose();
 
-                Thread.Sleep(1); // tránh CPU 100%
+                //Thread.Sleep(1); // tránh CPU 100%
             }
         }
 
@@ -1068,7 +1083,7 @@ namespace demo_ocr_label
                     size = ocrTexts[2].Trim();
                 }
 
-                //  > 4 chữ
+                //  > 4 chữ, cộng các string lại thành color
                 if (ocrTexts.Count() > 4)
                 {
                     var color_trim = "";
@@ -1076,17 +1091,30 @@ namespace demo_ocr_label
                     {
                         color_trim += ocrTexts[i].Trim();
                     }
-                    if (string.IsNullOrEmpty(color) &&
-                        colors.Contains(color_trim.ToLower()))
+                    //if (string.IsNullOrEmpty(color) &&
+                    //    colors.Contains(color_trim.ToLower()))
+                    //{
+                    //    color = color_trim;
+                    //}
+
+                    // dùng fuzzy match để lấy color (LevenshteinSimilarity)
+                    if (string.IsNullOrEmpty(color) && fuzzy.BestOrEmpty(color_trim.ToLower(), this.colors, 0.9) != "")
                     {
                         color = color_trim;
                     }
 
                 }
-                else // = 4
+                else // = 4, lấy phần tử cuối là color
                 {
-                    if (string.IsNullOrEmpty(color) &&
-                          colors.Contains(ocrTexts[3].Trim().ToLower()))
+                    //if (string.IsNullOrEmpty(color) &&
+                    //      colors.Contains(ocrTexts[3].Trim().ToLower()))
+                    //{
+                    //    color = ocrTexts[3].Trim();
+                    //}
+
+
+                    // dùng fuzzy match để lấy color (LevenshteinSimilarity)
+                    if (string.IsNullOrEmpty(color) && fuzzy.BestOrEmpty(ocrTexts[3].Trim().ToLower(), this.colors, 0.9) != "")
                     {
                         color = ocrTexts[3].Trim();
                     }

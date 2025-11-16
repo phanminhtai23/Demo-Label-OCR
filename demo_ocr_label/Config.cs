@@ -67,8 +67,10 @@ namespace demo_ocr_label
     }
     public class SystemArivables
     {
-        public bool debugMode { get; set; } = true;
-        public bool showTime { get; set; } = false;
+        public bool debugMode { get; set; } = false; // lưu ảnh ở từng model để debug
+        public bool showTime { get; set; } = true; // show thời gian ở chế độ debug
+
+        public bool saveJsonResult { get; set; } = true; // lưu kết quả dạng json cho label trích xuất thành công
     }
 
     public class LabelRectangle
