@@ -26,6 +26,7 @@ namespace demo_ocr_label
             {
                 Debug.WriteLine("Không tìm thấy file config!");
                 // Tạo config mặc định
+
                 return;
             }
 

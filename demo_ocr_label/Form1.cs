@@ -130,6 +130,7 @@ namespace demo_ocr_label
         private void Form1_Load(object sender, EventArgs e)
         {
 
+
             // Chỗ lưu ảnh debug
             ImageDebugSaver.ConfigureRoot("D:\\Project\\WinForm\\demo_ocr_label\\debug_imgs", disableDateSubFolder: false);
 
@@ -484,11 +485,24 @@ namespace demo_ocr_label
 
                             if (alignedLabel != null)
                             {
+
+
                                 //this.Invoke((Action)(() => ShowBitmap(aligned)));
                                 //var ocrTime = Stopwatch.StartNew();
                                 // 1️⃣ Gọi OCR trên vùng dưới bên trái
 
                                 //ShowQrBox(aligned, qrBox);
+
+
+                                // DEBUG: hiển thị ảnh cắt label
+                                Bitmap aligned_clone = (Bitmap)alignedLabel.Clone();
+                                pictureBox1.BeginInvoke(new Action(() =>
+                                {
+                                    pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
+                                    var old = pictureBox1.Image;
+                                    pictureBox1.Image = aligned_clone;
+                                    old?.Dispose();
+                                }));
 
 
                                 var thoiGianCatVaGop2Vung = Stopwatch.StartNew();
@@ -502,6 +516,21 @@ namespace demo_ocr_label
                                     double ms4 = thoiGianCatVaGop2Vung.Elapsed.TotalMilliseconds;
                                     Debug.WriteLine($"4. Thời gian cắt và gộp 2 vùng cần OCR: {ms4:F2} ms");
                                 }
+
+                                // 4 hiển thị ảnh cắt 1/4
+                                if (mergedCrop != null)
+                                {
+                                    Bitmap mergedCrop_clone = (Bitmap)mergedCrop.Clone();
+                                    pictureBox2.BeginInvoke(new Action(() =>
+                                    {
+                                        pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
+                                        var old = pictureBox2.Image;
+                                        pictureBox2.Image = mergedCrop_clone;
+                                        old?.Dispose();
+                                    }));
+                                    //mergedCrop.Dispose();
+                                }
+
 
                                 var thoiGianOCR = Stopwatch.StartNew();
 
@@ -542,16 +571,7 @@ namespace demo_ocr_label
                                     //    new OpenCvSharp.Point(mapped.X + roi.Width, mapped.Y + roi.Height),
                                     //    Scalar.Blue, 2);
 
-                                    Bitmap aligned_clone = (Bitmap)alignedLabel.Clone();
 
-                                    // DEBUG: hiển thị ảnh cắt label
-                                    pictureBox1.BeginInvoke(new Action(() =>
-                                    {
-                                        pictureBox1.SizeMode = PictureBoxSizeMode.Zoom; // co ảnh cho vừa khung
-                                        var old = pictureBox1.Image;
-                                        pictureBox1.Image = aligned_clone;
-                                        old?.Dispose();
-                                    }));
 
                                     cameraBox.BeginInvoke(new Action(() =>
                                     {
@@ -582,19 +602,7 @@ namespace demo_ocr_label
                                         }
                                     }));
 
-                                    // 4 hiển thị ảnh cắt 1/4
-                                    if (mergedCrop != null)
-                                    {
-                                        Bitmap mergedCrop_clone = (Bitmap)mergedCrop.Clone();
-                                        pictureBox2.BeginInvoke(new Action(() =>
-                                        {
-                                            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-                                            var old = pictureBox2.Image;
-                                            pictureBox2.Image = mergedCrop_clone;
-                                            old?.Dispose();
-                                        }));
-                                        mergedCrop.Dispose();
-                                    }
+
 
                                     //string combined = string.Join(" | ", ocrTexts.Select(tb => $"{tb.Text}: {tb.Score:F2}"));
 
@@ -1113,6 +1121,7 @@ namespace demo_ocr_label
                     //}
 
 
+
                     // dùng fuzzy match để lấy color (LevenshteinSimilarity)
                     if (string.IsNullOrEmpty(color) && fuzzy.BestOrEmpty(ocrTexts[3].Trim().ToLower(), this.colors, 0.9) != "")
                     {
@@ -1120,9 +1129,10 @@ namespace demo_ocr_label
                     }
                 }
 
-                //Debug.WriteLine($"Đơn hàng: {donHang}, Mã áo: {maAo}, size {size}, color: {color}");
+                Debug.WriteLine($"Đơn hàng: {donHang}, Mã áo: {maAo}, size {size}, color: {color}");
                 return (donHang, maAo, size, color);
             }
+            Debug.WriteLine($"Đơn hàng: {donHang}, Mã áo: {maAo}, size {size}, color: {color}");
             return (donHang, maAo, size, color);
         }
 
